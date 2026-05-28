@@ -1,0 +1,6 @@
+{
+  "name": "Supermercado Pare e Leve",
+  "description": "Sistema completo de frente de caixa (PDV), controle de estoque inteligente com previsões por inteligência artificial, gestão financeira e controle de clientes e fornecedores para supermercados de alto volume.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
