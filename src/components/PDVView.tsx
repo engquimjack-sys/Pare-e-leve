@@ -23,12 +23,13 @@ import {
   Sparkles,
   ShoppingBag
 } from "lucide-react";
-import { Produto, Cliente, CaixaSessao, Venda, ItemVenda } from "../types";
+import { Produto, Cliente, CaixaSessao, Venda, ItemVenda, Usuario } from "../types";
 
 interface PDVViewProps {
   products: Produto[];
   clients: Cliente[];
   activeSession: CaixaSessao | null;
+  currentUser: Usuario | null;
   onOpenSession: (valorInicial: number) => void;
   onCloseSession: () => void;
   onCommitVenda: (venda: Omit<Venda, "id">) => void;
@@ -38,6 +39,7 @@ export default function PDVView({
   products,
   clients,
   activeSession,
+  currentUser,
   onOpenSession,
   onCloseSession,
   onCommitVenda,
@@ -155,6 +157,12 @@ export default function PDVView({
     setCart(updated);
   };
 
+  const handleRemoveItemFromCart = (index: number) => {
+    const updated = [...cart];
+    updated.splice(index, 1);
+    setCart(updated);
+  };
+
   const handleBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!barcodeInput) return;
@@ -232,7 +240,7 @@ export default function PDVView({
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
               {activeSession
-                ? `Operador: Jackson Oliveira | Fundos: R$ ${activeSession.valorInicial} | Vendas: ${activeSession.vendasTotais} registradas`
+                ? `Operador: ${currentUser?.nome || "Jackson Oliveira"} | Fundos: R$ ${activeSession.valorInicial} | Vendas: ${activeSession.vendasTotais} registradas`
                 : "Abertura diária necessária para validação de cupons fiscais."}
             </p>
           </div>
@@ -385,9 +393,17 @@ export default function PDVView({
                         <Plus className="w-3 h-3" />
                       </button>
                     </div>
-                    <div className="text-right w-20 shrink-0 font-bold text-xs text-white pl-2">
+                    <div className="text-right w-16 shrink-0 font-bold text-xs text-white pl-2">
                       R$ {item.valorTotal.toFixed(2)}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItemFromCart(index)}
+                      className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg active:scale-95 transition-colors shrink-0"
+                      title="Deletar Item"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 ))
               )}
@@ -521,14 +537,31 @@ export default function PDVView({
                 </motion.div>
               )}
 
-              {/* Commit button */}
-              <button
-                onClick={handleCheckoutCommit}
-                className="w-full bg-[#FF6B00] hover:bg-orange-600 font-bold py-3 px-4 rounded-xl shadow-lg shadow-orange-500/20 text-white text-xs transition-all tracking-wider uppercase active:scale-98 flex items-center justify-center gap-2"
-              >
-                <ShoppingBag className="w-4 h-4 ml-1" />
-                Fechar Venda (Emitir Cupom)
-              </button>
+              {/* Commit button & Cancel button */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleCheckoutCommit}
+                  className="w-full bg-[#FF6B00] hover:bg-orange-600 font-bold py-3 px-4 rounded-xl shadow-lg shadow-orange-500/20 text-white text-xs transition-all tracking-wider uppercase active:scale-98 flex items-center justify-center gap-2"
+                >
+                  <ShoppingBag className="w-4 h-4 ml-1" />
+                  Fechar Venda (Emitir Cupom)
+                </button>
+
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCart([]);
+                      setLinkClienteId("");
+                      setDiscountValue(0);
+                      setCashReceived("");
+                    }}
+                    className="w-full bg-red-500/10 hover:bg-red-600 hover:text-white border border-red-500/20 text-red-400 font-semibold py-2.5 px-4 rounded-xl text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+                  >
+                    Cancelar Venda Corrente
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -648,7 +681,7 @@ export default function PDVView({
               <div>Venda ID: {receiptVenda.id}</div>
               <div className="whitespace-pre">Data: {new Date(receiptVenda.data).toLocaleString("pt-BR")}</div>
               {receiptVenda.clienteNome && <div>Cliente: {receiptVenda.clienteNome}</div>}
-              <div>Operador: Caixa 01 Jackson O.</div>
+              <div>Operador: {currentUser?.nome || "Jackson O."}</div>
             </div>
 
             <div className="border-b border-dashed border-gray-400 pb-2 mb-2" />

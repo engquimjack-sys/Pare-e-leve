@@ -17,7 +17,7 @@ interface LoginProps {
 
 export default function LoginView({ onLoginSuccess, usersList = [] }: LoginProps) {
   const [email, setEmail] = useState("engquimjack@gmail.com");
-  const [password, setPassword] = useState("••••••••");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -161,7 +161,11 @@ export default function LoginView({ onLoginSuccess, usersList = [] }: LoginProps
           </motion.div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+          {/* Decoy hidden inputs to override Google Chrome password saver/autofill triggers */}
+          <input type="text" name="google_saver_prevent_usr" style={{ position: "absolute", top: "-9999px", left: "-9999px" }} tabIndex={-1} aria-hidden="true" autoComplete="off" />
+          <input type="password" name="google_saver_prevent_pwd" style={{ position: "absolute", top: "-9999px", left: "-9999px" }} tabIndex={-1} aria-hidden="true" autoComplete="new-password" />
+
           <div className="space-y-1">
             <label className="text-xs text-gray-400 font-medium">Usuário</label>
             <div className="relative">
@@ -169,6 +173,7 @@ export default function LoginView({ onLoginSuccess, usersList = [] }: LoginProps
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="off"
                 className="w-full bg-[#1E293B] border border-white/5 focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00]/40 text-sm text-white rounded-xl py-3 pl-10 pr-10 outline-none appearance-none transition-all cursor-pointer"
               >
                 {usersList.map((usr) => (
@@ -199,7 +204,8 @@ export default function LoginView({ onLoginSuccess, usersList = [] }: LoginProps
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Inserir Senha"
+                autoComplete="new-password"
                 className="w-full bg-[#1E293B] border border-white/5 focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00]/40 text-sm text-white rounded-xl py-3 pl-10 pr-10 outline-none transition-all"
               />
               <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -78,6 +78,30 @@ export default function StockView({
   const [isEditing, setIsEditing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<Partial<Produto> | null>(null);
+
+  // Custom added categories state (Requirement 3)
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    const saved = localStorage.getItem("pare_leve_custom_categories");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showCategoryInput, setShowCategoryInput] = useState(false);
+  const [newCategoryText, setNewCategoryText] = useState("");
+
+  const defaultCategories = useMemo(() => [
+    "Mercearia",
+    "Hortifrúti",
+    "Laticínios & Frios",
+    "Açougue",
+    "Bebidas",
+    "Higiene & Limpeza",
+    "Padaria"
+  ], []);
+
+  const allAvailableCategories = useMemo(() => {
+    const fromProducts = products.map((p) => p.categoria).filter(Boolean);
+    const combined = [...defaultCategories, ...customCategories, ...fromProducts];
+    return Array.from(new Set(combined));
+  }, [products, customCategories, defaultCategories]);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [imageMode, setImageMode] = useState<"url" | "file">("url");
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -186,7 +210,7 @@ export default function StockView({
     setTimeout(() => setQuickFeedback(null), 5000);
   };
 
-  const categories = ["Todas", ...Array.from(new Set(products.map((p) => p.categoria)))];
+  const categories = ["Todas", ...allAvailableCategories];
 
   // Filters
   const filteredProducts = products.filter((prod) => {
@@ -292,14 +316,14 @@ export default function StockView({
     setCurrentProduct({
       codigoBarras: "",
       nome: "",
-      categoria: "Mercearia",
+      categoria: "",
       marca: "",
-      quantidade: 10,
-      estoqueMinimo: 5,
-      valorCompra: 0,
-      valorVenda: 0,
-      validade: "2027-01-01",
-      fornecedorId: suppliers[0]?.id || "",
+      quantidade: undefined,
+      estoqueMinimo: undefined,
+      valorCompra: undefined,
+      valorVenda: undefined,
+      validade: "",
+      fornecedorId: "",
       fotoUrl: ""
     });
     setIsAdding(true);
@@ -311,11 +335,37 @@ export default function StockView({
     e.preventDefault();
     if (!currentProduct) return;
 
+    const productToSave: any = {
+      ...currentProduct,
+      categoria: currentProduct.categoria || "Mercearia",
+      quantidade: currentProduct.quantidade || 0,
+      estoqueMinimo: currentProduct.estoqueMinimo || 0,
+      valorCompra: currentProduct.valorCompra || 0,
+      valorVenda: currentProduct.valorVenda || 0,
+      validade: currentProduct.validade || new Date().toISOString().split("T")[0],
+      fornecedorId: currentProduct.fornecedorId || null
+    };
+
+    // Caso a foto não seja inserida, buscar na web o produto similar de acordo com a descrição do nome comercial e Marca/Fabricante.
+    if (!productToSave.fotoUrl) {
+      const cleanName = (productToSave.nome || "").trim();
+      const cleanBrand = (productToSave.marca || "").trim();
+      // Generates query with space replaced by commas for Unsplash Search fallback
+      const searchTerms = [cleanName, cleanBrand, "product", "supermarket"]
+        .filter(Boolean)
+        .join(",")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // remove accents
+        .replace(/[^a-zA-Z0-9,]/g, ""); // remove weird chars
+      
+      productToSave.fotoUrl = `https://images.unsplash.com/featured/?${encodeURIComponent(searchTerms)}`;
+    }
+
     if (isAdding) {
-      onAddProduct(currentProduct as Omit<Produto, "id">);
+      onAddProduct(productToSave as Omit<Produto, "id">);
       setIsAdding(false);
     } else if (isEditing) {
-      onEditProduct(currentProduct as Produto);
+      onEditProduct(productToSave as Produto);
       setIsEditing(false);
     }
     setCurrentProduct(null);
@@ -733,20 +783,58 @@ export default function StockView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs text-gray-400">Categoria</label>
-                  <select
-                    value={currentProduct.categoria || "Mercearia"}
-                    onChange={(e) => setCurrentProduct({ ...currentProduct, categoria: e.target.value })}
-                    className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF6B00] text-xs text-white"
-                  >
-                    <option value="Mercearia">Mercearia</option>
-                    <option value="Hortifrúti">Hortifrúti</option>
-                    <option value="Laticínios & Frios">Laticínios & Frios</option>
-                    <option value="Açougue">Açougue</option>
-                    <option value="Bebidas">Bebidas</option>
-                    <option value="Higiene & Limpeza">Higiene & Limpeza</option>
-                    <option value="Padaria">Padaria</option>
-                  </select>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-gray-400">Categoria</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCategoryInput(!showCategoryInput)}
+                      className="text-[10px] text-[#FF6B00] hover:underline"
+                    >
+                      {showCategoryInput ? "Escolher Existente" : "+ Nova Categ."}
+                    </button>
+                  </div>
+                  {showCategoryInput ? (
+                    <div className="flex gap-1.5 pt-0.5">
+                      <input
+                        type="text"
+                        value={newCategoryText}
+                        onChange={(e) => setNewCategoryText(e.target.value)}
+                        placeholder="Nome da categoria"
+                        className="flex-1 bg-[#1E293B] border border-white/10 rounded-xl p-2.5 outline-none focus:border-[#FF6B00] text-xs text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = newCategoryText.trim();
+                          if (val) {
+                            if (!customCategories.includes(val)) {
+                              const updated = [...customCategories, val];
+                              setCustomCategories(updated);
+                              localStorage.setItem("pare_leve_custom_categories", JSON.stringify(updated));
+                            }
+                            setCurrentProduct({ ...currentProduct, categoria: val });
+                            setNewCategoryText("");
+                            setShowCategoryInput(false);
+                          }
+                        }}
+                        className="bg-[#FF6B00] hover:bg-[#FF6B00]/80 text-white font-semibold px-3 rounded-xl text-xs transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={currentProduct.categoria ?? ""}
+                      onChange={(e) => setCurrentProduct({ ...currentProduct, categoria: e.target.value })}
+                      className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF6B00] text-xs text-white"
+                      required
+                    >
+                      <option value="">Selecione uma categoria</option>
+                      {allAvailableCategories.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs text-gray-400">Marca/Fabricante</label>
@@ -768,9 +856,10 @@ export default function StockView({
                     type="number"
                     step="0.01"
                     required
-                    value={currentProduct.valorCompra || 0}
-                    onChange={(e) => setCurrentProduct({ ...currentProduct, valorCompra: parseFloat(e.target.value) })}
+                    value={currentProduct.valorCompra ?? ""}
+                    onChange={(e) => setCurrentProduct({ ...currentProduct, valorCompra: e.target.value === "" ? undefined : parseFloat(e.target.value) })}
                     className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF6B00] text-xs text-white font-mono"
+                    placeholder="R$ 0,00"
                   />
                 </div>
                 <div className="space-y-1">
@@ -779,9 +868,10 @@ export default function StockView({
                     type="number"
                     step="0.01"
                     required
-                    value={currentProduct.valorVenda || 0}
-                    onChange={(e) => setCurrentProduct({ ...currentProduct, valorVenda: parseFloat(e.target.value) })}
+                    value={currentProduct.valorVenda ?? ""}
+                    onChange={(e) => setCurrentProduct({ ...currentProduct, valorVenda: e.target.value === "" ? undefined : parseFloat(e.target.value) })}
                     className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF6B00] text-xs text-white font-mono"
+                    placeholder="R$ 0,00"
                   />
                 </div>
               </div>
@@ -792,9 +882,10 @@ export default function StockView({
                   <input
                     type="number"
                     required
-                    value={currentProduct.quantidade || 0}
-                    onChange={(e) => setCurrentProduct({ ...currentProduct, quantidade: parseInt(e.target.value) })}
+                    value={currentProduct.quantidade ?? ""}
+                    onChange={(e) => setCurrentProduct({ ...currentProduct, quantidade: e.target.value === "" ? undefined : parseInt(e.target.value) })}
                     className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF6B00] text-xs text-white font-mono"
+                    placeholder="Quantidade"
                   />
                 </div>
                 <div className="space-y-1">
@@ -802,9 +893,10 @@ export default function StockView({
                   <input
                     type="number"
                     required
-                    value={currentProduct.estoqueMinimo || 0}
-                    onChange={(e) => setCurrentProduct({ ...currentProduct, estoqueMinimo: parseInt(e.target.value) })}
+                    value={currentProduct.estoqueMinimo ?? ""}
+                    onChange={(e) => setCurrentProduct({ ...currentProduct, estoqueMinimo: e.target.value === "" ? undefined : parseInt(e.target.value) })}
                     className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF6B00] text-xs text-white font-mono"
+                    placeholder="Estoque Mínimo"
                   />
                 </div>
               </div>
@@ -823,10 +915,12 @@ export default function StockView({
                 <div className="space-y-1">
                   <label className="text-xs text-gray-400">Fornecedor Preferencial</label>
                   <select
-                    value={currentProduct.fornecedorId || ""}
+                    value={currentProduct.fornecedorId ?? ""}
                     onChange={(e) => setCurrentProduct({ ...currentProduct, fornecedorId: e.target.value })}
                     className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF6B00] text-xs text-white"
                   >
+                    <option value="">Selecione um fornecedor</option>
+                    <option value="avulso">Fornecedor Avulso (Única vez - Sem Cadastro)</option>
                     {suppliers.map((s) => (
                       <option key={s.id} value={s.id}>{s.nome}</option>
                     ))}

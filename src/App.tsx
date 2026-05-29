@@ -865,6 +865,7 @@ export default function App() {
             products={products}
             clients={clients}
             activeSession={activeSession}
+            currentUser={currentUser}
             onOpenSession={handleOpenSession}
             onCloseSession={handleCloseSession}
             onCommitVenda={handleCommitVenda}
