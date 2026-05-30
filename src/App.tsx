@@ -640,16 +640,18 @@ export default function App() {
         nextSession.vendasTotais += 1;
         setActiveSession(nextSession);
       }
-      // Add a receivable marked as already received immediately
+      // Add a receivable marked as already received immediately or pending for paylater
       const rec: ContaReceber = {
         id: `cr-${Date.now()}`,
-        descricao: `Venda PDV faturamento: ${vendaId}`,
+        descricao: venda.formaPagamento === "Paylater" ? `Venda a Prazo (Paylater) Cupom: ${vendaId}` : `Venda PDV faturamento: ${vendaId}`,
         valor: venda.total,
         clienteId: venda.clienteId,
         clienteNome: venda.clienteNome || "Consumidor Avulso",
-        dataVencimento: new Date().toISOString().split("T")[0],
-        status: "Recebido",
-        formaRecebimento: "Crediário"
+        dataVencimento: venda.formaPagamento === "Paylater" ? (venda.paylaterDueDate || new Date().toISOString().split("T")[0]) : new Date().toISOString().split("T")[0],
+        status: venda.formaPagamento === "Paylater" ? "Pendente" : "Recebido",
+        formaRecebimento: "Crediário",
+        dataCompra: venda.formaPagamento === "Paylater" ? (venda.paylaterPurchaseDate || new Date().toISOString().split("T")[0]) : new Date().toISOString().split("T")[0],
+        itens: venda.itens
       };
       nextReceivables = [rec, ...nextReceivables];
       setReceivables(nextReceivables);

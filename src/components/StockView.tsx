@@ -29,6 +29,36 @@ import {
 } from "lucide-react";
 import { Produto, Fornecedor } from "../types";
 
+function getProductImage(fotoUrl?: string, name?: string, brand?: string): string {
+  if (!fotoUrl) {
+    const cleanName = (name || "").split(" ")[0].trim();
+    const cleanBrand = (brand || "").split(" ")[0].trim();
+    const searchTerms = [cleanName, cleanBrand, "food", "grocery"]
+      .filter(Boolean)
+      .join(",")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9,]/g, "");
+    return `https://loremflickr.com/150/150/${encodeURIComponent(searchTerms)}`;
+  }
+
+  const normalized = fotoUrl.trim();
+
+  // If it's an Unsplash featured URL with no dimensions or is a generic featured search path
+  if (normalized.includes("images.unsplash.com/featured/?") || normalized.endsWith("featured/")) {
+    const query = normalized.split("?")[1] || "";
+    return `https://images.unsplash.com/featured/150x150/?${query || "grocery"}`;
+  }
+
+  if (normalized.includes("images.unsplash.com/featured") && !normalized.match(/\/\d+x\d+\//)) {
+    const parts = normalized.split("?");
+    const query = parts[1] || "";
+    return `https://images.unsplash.com/featured/150x150/?${query}`;
+  }
+
+  return normalized;
+}
+
 interface StockViewProps {
   products: Produto[];
   suppliers: Fornecedor[];
@@ -358,7 +388,7 @@ export default function StockView({
         .replace(/[\u0300-\u036f]/g, "") // remove accents
         .replace(/[^a-zA-Z0-9,]/g, ""); // remove weird chars
       
-      productToSave.fotoUrl = `https://images.unsplash.com/featured/?${encodeURIComponent(searchTerms)}`;
+      productToSave.fotoUrl = `https://images.unsplash.com/featured/300x300/?${encodeURIComponent(searchTerms)}`;
     }
 
     if (isAdding) {
@@ -521,7 +551,7 @@ export default function StockView({
               className="bg-[#1E293B]/45 border border-white/5 p-3 rounded-2xl flex items-center gap-3"
             >
               <img
-                src={liveMatchedProduct.fotoUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=80&q=50"}
+                src={getProductImage(liveMatchedProduct.fotoUrl, liveMatchedProduct.nome, liveMatchedProduct.marca)}
                 className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1542838132-92c53300491e?w=80&q=50";
@@ -637,7 +667,7 @@ export default function StockView({
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={prod.fotoUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=80&q=50"}
+                            src={getProductImage(prod.fotoUrl, prod.nome, prod.marca)}
                             alt={prod.nome}
                             onError={(e) => {
                               // Fallback image if unsplash fails

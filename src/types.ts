@@ -75,9 +75,11 @@ export interface Venda {
   subtotal: number;
   desconto: number;
   total: number;
-  formaPagamento: "Dinheiro" | "Crédito" | "Débito" | "PIX";
+  formaPagamento: "Dinheiro" | "Crédito" | "Débito" | "PIX" | "Paylater";
   clienteId?: string;
   clienteNome?: string;
+  paylaterDueDate?: string;
+  paylaterPurchaseDate?: string;
 }
 
 export interface CaixaSessao {
@@ -122,4 +124,6 @@ export interface ContaReceber {
   dataVencimento: string;
   status: "Pendente" | "Recebido";
   formaRecebimento: "Mensalidade" | "Crediário" | "Fidelidade" | "Outro";
+  dataCompra?: string;
+  itens?: ItemVenda[];
 }

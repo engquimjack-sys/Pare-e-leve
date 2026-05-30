@@ -16,7 +16,11 @@ import {
   Layers,
   FileSpreadsheet,
   FileText,
-  BadgeAlert
+  BadgeAlert,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  Clock
 } from "lucide-react";
 import { ContaPagar, ContaReceber, Fornecedor, Cliente, Produto, Venda } from "../types";
 
@@ -49,6 +53,10 @@ export default function FinancialView({
   const [activeTab, setActiveTab] = useState<"contas_pagar" | "contas_receber">("contas_pagar");
   const [isAddingBill, setIsAddingBill] = useState(false);
 
+  // Filters & Row expansion for Contas a Receber (Paylater details)
+  const [clientFilter, setClientFilter] = useState("");
+  const [expandedReceivableId, setExpandedReceivableId] = useState<string | null>(null);
+
   // New payable/receivable forms states
   const [desc, setDesc] = useState("");
   const [val, setVal] = useState<number>(0);
@@ -74,6 +82,27 @@ export default function FinancialView({
   const totalToReceive = useMemo(() => {
     return receivables.filter((r) => r.status === "Pendente").reduce((sum, r) => sum + r.valor, 0);
   }, [receivables]);
+
+  // Filtered receivables for Contas a Receber (Paylater & standard receivables)
+  const filteredReceivablesList = useMemo(() => {
+    if (!clientFilter.trim()) {
+      return receivables;
+    }
+    const term = clientFilter.toLowerCase();
+    return receivables.filter((r) => r.clienteNome?.toLowerCase().includes(term));
+  }, [receivables, clientFilter]);
+
+  // Total balance of selected filtered receivables list which are Pendente
+  const filteredPendingTotal = useMemo(() => {
+    return filteredReceivablesList
+      .filter((r) => r.status === "Pendente")
+      .reduce((sum, r) => sum + r.valor, 0);
+  }, [filteredReceivablesList]);
+
+  // Total of all matchings (sum of columns for filtered search)
+  const filteredAllTotal = useMemo(() => {
+    return filteredReceivablesList.reduce((sum, r) => sum + r.valor, 0);
+  }, [filteredReceivablesList]);
 
   // Form handle
   const handleCreateBill = (e: React.FormEvent) => {
@@ -487,61 +516,194 @@ export default function FinancialView({
               </table>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table id="receivables-table" className="w-full text-left text-xs text-gray-300">
-                <thead>
-                  <tr className="border-b border-white/5 text-gray-400 uppercase text-[10px] font-mono">
-                    <th className="py-3 px-2">Fatura / Origem</th>
-                    <th className="py-3 px-2">Titular / Cliente</th>
-                    <th className="py-3 px-2">Data Vencimento</th>
-                    <th className="py-3 px-2">Modalidade</th>
-                    <th className="py-3 px-2 text-right">Valor Lançado</th>
-                    <th className="py-3 px-2 text-center">Status</th>
-                    <th className="py-3 px-2 text-right">Liquidação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {receivables.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-10 text-gray-500">Nenhuma conta de recebimento lançada.</td>
+            <div className="space-y-4">
+              {/* Client filter block with totals */}
+              <div className="bg-[#1E293B]/40 p-4 rounded-2xl border border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex-1 w-full relative">
+                  <span className="text-[10px] text-gray-400 font-semibold block uppercase font-mono mb-1.5">Pesquisar por Cliente (Filtro Contrato / Paylater)</span>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={clientFilter}
+                      onChange={(e) => {
+                        setClientFilter(e.target.value);
+                        setExpandedReceivableId(null); // Close active expansion when filtering to keep UI clean
+                      }}
+                      placeholder="Digitar nome do cliente..."
+                      className="w-full bg-[#0F172A] border border-white/10 rounded-xl py-2 px-3 pl-9 text-xs text-white placeholder-gray-500 outline-none focus:border-[#FF6B00]/40 transition-all font-sans"
+                    />
+                    <Search className="absolute left-3 top-3 w-3.5 h-3.5 text-gray-400" />
+                    {clientFilter && (
+                      <button
+                        onClick={() => setClientFilter("")}
+                        className="absolute right-3 top-2 text-gray-400 hover:text-white text-xs font-semibold"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {clientFilter && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex gap-4 items-center w-full md:w-auto"
+                  >
+                    <div className="bg-amber-500/10 border border-amber-500/15 p-2 px-4 rounded-xl text-right flex-1 md:flex-initial">
+                      <span className="text-[9px] text-amber-400 uppercase font-mono font-bold block">Pendente de Recebimento</span>
+                      <span className="text-sm font-extrabold text-amber-300 font-mono">
+                        R$ {filteredPendingTotal.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="bg-cyan-500/10 border border-cyan-500/15 p-2 px-4 rounded-xl text-right flex-1 md:flex-initial">
+                      <span className="text-[9px] text-cyan-400 uppercase font-mono font-bold block">Total Geral das Compras</span>
+                      <span className="text-sm font-extrabold text-cyan-300 font-mono">
+                        R$ {filteredAllTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              <div className="overflow-x-auto">
+                <table id="receivables-table" className="w-full text-left text-xs text-gray-300">
+                  <thead>
+                    <tr className="border-b border-white/5 text-gray-400 uppercase text-[10px] font-mono">
+                      <th className="py-3 px-2 text-center w-8">#</th>
+                      <th className="py-3 px-2">Fatura / Origem</th>
+                      <th className="py-3 px-2">Titular / Cliente</th>
+                      <th className="py-3 px-2">Data Vencimento</th>
+                      <th className="py-3 px-2">Modalidade</th>
+                      <th className="py-3 px-2 text-right">Valor Lançado</th>
+                      <th className="py-3 px-2 text-center">Status</th>
+                      <th className="py-3 px-2 text-right">Liquidação</th>
                     </tr>
-                  ) : (
-                    receivables.map((bill) => (
-                      <tr key={bill.id} className="hover:bg-white/5 transition-colors">
-                        <td className="py-3 px-2 font-medium text-white">{bill.descricao}</td>
-                        <td className="py-3 px-2 text-gray-400">{bill.clienteNome || "Consumidor Geral"}</td>
-                        <td className="py-3 px-2 font-mono text-[10px]">{bill.dataVencimento}</td>
-                        <td className="py-3 px-2">
-                          <span className="text-[10px] bg-cyan-500/10 text-cyan-400 rounded-full py-0.5 px-2.5 border border-cyan-500/10">
-                            {bill.formaRecebimento}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2 text-right font-mono font-semibold">R$ {bill.valor.toFixed(2)}</td>
-                        <td className="py-3 px-2 text-center">
-                          <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full ${bill.status === "Recebido" ? "bg-emerald-500/15 text-emerald-400" : "bg-yellow-500/15 text-yellow-500"}`}>
-                            {bill.status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2 text-right">
-                          {bill.status === "Pendente" ? (
-                            <button
-                              onClick={() => {
-                                onReceiveBill(bill.id);
-                                alert("Duplicata liquidada no sistema com sucesso!");
-                              }}
-                              className="text-[10px] bg-white/5 hover:bg-[#FF6B00]/15 hover:text-[#FF6B00] border border-white/10 px-2.5 py-1 rounded-lg transition-all active:scale-95 text-xs text-[#FF6B00] font-semibold"
-                            >
-                              Receber Duplicata
-                            </button>
-                          ) : (
-                            <span className="text-[10px] text-gray-500 font-mono">Recebida OK</span>
-                          )}
-                        </td>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {filteredReceivablesList.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center py-10 text-gray-500">Nenhuma conta de recebimento que corresponda ao filtro.</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredReceivablesList.map((bill) => {
+                        const hasMultipleItems = bill.itens && bill.itens.length > 1;
+                        return (
+                          <React.Fragment key={bill.id}>
+                            <tr
+                              className={`transition-colors duration-150 ${hasMultipleItems ? "cursor-pointer hover:bg-white/5" : "hover:bg-white/5"} ${expandedReceivableId === bill.id ? "bg-white/5 border-l-2 border-amber-500" : ""}`}
+                              onClick={() => {
+                                if (hasMultipleItems) {
+                                  setExpandedReceivableId((prev) => (prev === bill.id ? null : bill.id));
+                                }
+                              }}
+                              title={hasMultipleItems ? "Clique para expandir o detalhamento de itens" : undefined}
+                            >
+                              <td className="py-3 px-2 text-center">
+                                {hasMultipleItems ? (
+                                  <button className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+                                    {expandedReceivableId === bill.id ? <ChevronUp className="w-4 h-4 text-amber-400" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-gray-600 font-mono">-</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-2 font-medium text-white flex items-center gap-1.5">
+                                {bill.descricao}
+                              </td>
+                              <td className="py-3 px-2 text-gray-400">{bill.clienteNome || "Consumidor Geral"}</td>
+                              <td className="py-3 px-2 font-mono text-[10px]">{bill.dataVencimento}</td>
+                              <td className="py-3 px-2">
+                                <span className={`text-[10px] rounded-full py-0.5 px-2.5 border ${bill.descricao.toLowerCase().includes("paylater") ? "bg-amber-500/10 text-amber-400 border-amber-500/10" : "bg-cyan-500/10 text-cyan-400 border-cyan-500/10"}`}>
+                                  {bill.descricao.toLowerCase().includes("paylater") ? "Paylater" : bill.formaRecebimento}
+                                </span>
+                              </td>
+                              <td className="py-3 px-2 text-right font-mono font-semibold">R$ {bill.valor.toFixed(2)}</td>
+                              <td className="py-3 px-2 text-center">
+                                <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full ${bill.status === "Recebido" ? "bg-emerald-500/15 text-emerald-400" : "bg-yellow-500/15 text-yellow-500"}`}>
+                                  {bill.status === "Recebido" ? "Recebido" : "Pendente"}
+                                </span>
+                              </td>
+                              <td className="py-3 px-2 text-right">
+                                {bill.status === "Pendente" ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation(); // Avoid triggering accordion expand
+                                      onReceiveBill(bill.id);
+                                      alert("Duplicata liquidada no sistema com sucesso!");
+                                    }}
+                                    className="text-[10px] bg-white/5 hover:bg-[#FF6B00]/15 hover:text-[#FF6B00] border border-white/10 px-2.5 py-1 rounded-lg transition-all active:scale-95 text-xs text-[#FF6B00] font-semibold"
+                                  >
+                                    Receber Duplicata
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-gray-500 font-mono">Recebida OK</span>
+                                )}
+                              </td>
+                            </tr>
+                            
+                            {/* Expanded items section */}
+                            {expandedReceivableId === bill.id && bill.itens && (
+                              <tr className="bg-[#0e1626]/40">
+                                <td colSpan={8} className="p-4">
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: "auto" }}
+                                    className="border border-amber-500/10 rounded-2xl overflow-hidden bg-[#0a111e]/90 p-4 space-y-3"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+                                      <h5 className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest font-mono">
+                                        Detalhamento da Compra ({bill.itens.length} itens)
+                                      </h5>
+                                    </div>
+
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left text-xs text-gray-300">
+                                        <thead>
+                                          <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-mono">
+                                            <th className="py-2 px-1">Produto</th>
+                                            <th className="py-2 px-1 text-center">Quant.</th>
+                                            <th className="py-2 px-1 text-right">Preço Unit.</th>
+                                            <th className="py-2 px-1 text-right">Subtotal</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                          {bill.itens.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-white/5 transition-all">
+                                              <td className="py-2 px-1 text-white font-medium">{item.nomeProduto}</td>
+                                              <td className="py-2 px-1 text-center font-mono font-bold text-gray-300">{item.quantidade}x</td>
+                                              <td className="py-2 px-1 text-right font-mono text-gray-400">R$ {item.valorUnitario.toFixed(2)}</td>
+                                              <td className="py-2 px-1 text-right font-mono text-amber-400 font-bold">R$ {item.valorTotal.toFixed(2)}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+
+                                    <div className="border-t border-white/5 pt-2 flex flex-col sm:flex-row justify-between items-center text-[10px] gap-2">
+                                      <span className="text-gray-400">
+                                        Dia da Compra: <span className="font-mono text-white font-bold">{bill.dataCompra || "Especificada hoje"}</span>
+                                      </span>
+                                      <span className="text-gray-400">
+                                        Data de Vencimento: <span className="font-mono text-white font-bold">{bill.dataVencimento}</span>
+                                      </span>
+                                      <span className="font-bold text-white">
+                                        Total Cupom: <span className="font-mono text-amber-400 text-xs">R$ {bill.valor.toFixed(2)}</span>
+                                      </span>
+                                    </div>
+                                  </motion.div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

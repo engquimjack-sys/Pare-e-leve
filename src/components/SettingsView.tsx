@@ -18,7 +18,8 @@ import {
   Compass,
   CheckCircle,
   HelpCircle,
-  Trash2
+  Trash2,
+  QrCode
 } from "lucide-react";
 import { Usuario } from "../types";
 import { isSupabaseConfigured } from "../lib/supabaseClient";
@@ -47,6 +48,12 @@ export default function SettingsView({
   const [cnpj, setCnpj] = useState("14.509.323/0001-09");
   const [address, setAddress] = useState("Av. das Nações, 2309 - São Paulo - SP");
   const [taxRegime, setTaxRegime] = useState("Simples Nacional");
+  
+  // PIX configuration state
+  const [pixKey, setPixKey] = useState("pareeleve-supermarket-pix-key@bcb.br");
+  const [pixBeneficiary, setPixBeneficiary] = useState("Pare e Leve Supermercados S/A");
+  const [pixCity, setPixCity] = useState("SAO PAULO");
+
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   // User list states
@@ -210,6 +217,9 @@ export default function SettingsView({
         if (parsed.cnpj) setCnpj(parsed.cnpj);
         if (parsed.address) setAddress(parsed.address);
         if (parsed.taxRegime) setTaxRegime(parsed.taxRegime);
+        if (parsed.pixKey) setPixKey(parsed.pixKey);
+        if (parsed.pixBeneficiary) setPixBeneficiary(parsed.pixBeneficiary);
+        if (parsed.pixCity) setPixCity(parsed.pixCity);
       } catch (err) {
         console.error("Erro ao carregar dados corporativos persistentes", err);
       }
@@ -219,13 +229,13 @@ export default function SettingsView({
   const handleSaveCompanyDetails = () => {
     localStorage.setItem(
       "pare_leve_company_details",
-      JSON.stringify({ tradeName, cnpj, address, taxRegime })
+      JSON.stringify({ tradeName, cnpj, address, taxRegime, pixKey, pixBeneficiary, pixCity })
     );
     setShowSaveSuccess(true);
     setDiagnosticLog((prev) => [
       ...prev,
-      `[CONFIGURACAO] Informações corporativas salvas com sucesso.`,
-      `[EMISSÃO FISCAL] ${tradeName} - CNPJ: ${cnpj} | Regime: ${taxRegime}`
+      `[CONFIGURACAO] Informações corporativas e chave PIX salvas.`,
+      `[EMISSÃO FISCAL] ${tradeName} - CNPJ: ${cnpj} | Chave PIX: ${pixKey}`
     ]);
     setTimeout(() => {
       setShowSaveSuccess(false);
@@ -358,6 +368,45 @@ export default function SettingsView({
                 <option value="Lucro Presumido">Lucro Presumido</option>
                 <option value="Lucro Real">Lucro Real (Supermercados S/A)</option>
               </select>
+            </div>
+          </div>
+
+          <div className="border-t border-white/5 pt-4 space-y-3">
+            <div className="flex items-center gap-1.5 pt-1">
+              <QrCode className="w-4 h-4 text-cyan-400" />
+              <h4 className="text-xs font-bold text-gray-200 uppercase tracking-wider font-mono">Configuração de Recebimento PIX (Vendas PDV)</h4>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs pb-2">
+              <div className="space-y-1">
+                <label className="text-gray-400">Chave PIX Recebimento</label>
+                <input
+                  type="text"
+                  value={pixKey}
+                  onChange={(e) => setPixKey(e.target.value)}
+                  placeholder="Ex: pix@supermercado.com.br ou CNPJ"
+                  className="w-full bg-[#1E293B] border border-white/10 p-3 rounded-xl text-white outline-none focus:border-[#FF6B00] font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-gray-400">Nome do Beneficiário</label>
+                <input
+                  type="text"
+                  value={pixBeneficiary}
+                  onChange={(e) => setPixBeneficiary(e.target.value)}
+                  placeholder="Ex: Pare e Leve S/A"
+                  className="w-full bg-[#1E293B] border border-white/10 p-3 rounded-xl text-white outline-none focus:border-[#FF6B00]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-gray-400">Cidade de Cadastro</label>
+                <input
+                  type="text"
+                  value={pixCity}
+                  onChange={(e) => setPixCity(e.target.value)}
+                  placeholder="Ex: SAO PAULO"
+                  className="w-full bg-[#1E293B] border border-white/10 p-3 rounded-xl text-white outline-none focus:border-[#FF6B00]"
+                />
+              </div>
             </div>
           </div>
 

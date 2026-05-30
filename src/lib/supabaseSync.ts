@@ -279,7 +279,7 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
           subtotal: sale.subtotal,
           desconto: sale.desconto,
           total: sale.total,
-          forma_pagamento: sale.formaPagamento,
+          forma_pagamento: sale.formaPagamento === "Paylater" ? "Crédito" : sale.formaPagamento,
           cliente_id: (sale.clienteId && validClientIds.has(String(sale.clienteId))) ? sale.clienteId : null,
           cliente_nome: sale.clienteNome || null
         };

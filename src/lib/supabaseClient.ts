@@ -197,7 +197,7 @@ export const mapAppReceivableToDB = (r: any) => ({
   cliente_nome: r.clienteNome || null,
   data_vencimento: r.dataVencimento,
   status: r.status,
-  forma_recebimento: r.formaRecebimento
+  forma_recebimento: r.formaRecebimento === "Paylater" ? "Crediário" : r.formaRecebimento
 });
 
 export const mapDBMovementToApp = (db: any) => ({

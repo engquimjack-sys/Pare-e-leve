@@ -21,9 +21,106 @@ import {
   Printer,
   X,
   Sparkles,
-  ShoppingBag
+  ShoppingBag,
+  Clock
 } from "lucide-react";
 import { Produto, Cliente, CaixaSessao, Venda, ItemVenda, Usuario } from "../types";
+
+function calculateCRC16(str: string): string {
+  let crc = 0xFFFF;
+  const polynomial = 0x1021;
+
+  for (let i = 0; i < str.length; i++) {
+    const b = str.charCodeAt(i);
+    for (let j = 0; j < 8; j++) {
+      const bit = ((b >> (7 - j)) & 1) === 1;
+      const c15 = ((crc >> 15) & 1) === 1;
+      crc <<= 1;
+      if (c15 !== bit) {
+        crc ^= polynomial;
+      }
+    }
+  }
+
+  crc &= 0xFFFF;
+  return crc.toString(16).toUpperCase().padStart(4, "0");
+}
+
+function generatePixPayload(key: string, name: string, city: string, amount: number): string {
+  const cleanString = (str: string) => {
+    return str
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .trim();
+  };
+
+  const cleanName = cleanString(name).toUpperCase().substring(0, 25);
+  const cleanCity = cleanString(city).toUpperCase().substring(0, 15) || "SAO PAULO";
+  
+  const formatField = (id: string, value: string): string => {
+    return id + String(value.length).padStart(2, "0") + value;
+  };
+
+  const payloadFormat = formatField("00", "01");
+  const gui = formatField("00", "br.gov.bcb.pix");
+  const keyField = formatField("01", key.trim());
+  const merchantAccountInfo = formatField("26", gui + keyField);
+
+  const merchantCategory = formatField("52", "0000");
+  const currency = formatField("53", "986");
+  const transactionAmount = formatField("54", amount.toFixed(2));
+  const countryCode = formatField("58", "BR");
+  const merchantName = formatField("59", cleanName || "PARE E LEVE");
+  const merchantCity = formatField("60", cleanCity || "SAO PAULO");
+  const txid = formatField("05", "***");
+  const additionalData = formatField("62", txid);
+
+  const partialPayload = 
+    payloadFormat + 
+    merchantAccountInfo + 
+    merchantCategory + 
+    currency + 
+    transactionAmount + 
+    countryCode + 
+    merchantName + 
+    merchantCity + 
+    additionalData + 
+    "6304";
+
+  const crc = calculateCRC16(partialPayload);
+  return partialPayload + crc;
+}
+
+function getProductImage(fotoUrl?: string, name?: string, brand?: string): string {
+  if (!fotoUrl) {
+    const cleanName = (name || "").split(" ")[0].trim();
+    const cleanBrand = (brand || "").split(" ")[0].trim();
+    const searchTerms = [cleanName, cleanBrand, "food", "grocery"]
+      .filter(Boolean)
+      .join(",")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9,]/g, "");
+    return `https://loremflickr.com/150/150/${encodeURIComponent(searchTerms)}`;
+  }
+
+  const normalized = fotoUrl.trim();
+
+  // If it's an Unsplash featured URL with no dimensions or is a generic featured search path
+  if (normalized.includes("images.unsplash.com/featured/?") || normalized.endsWith("featured/")) {
+    const query = normalized.split("?")[1] || "";
+    return `https://images.unsplash.com/featured/150x150/?${query || "grocery"}`;
+  }
+
+  if (normalized.includes("images.unsplash.com/featured") && !normalized.match(/\/\d+x\d+\//)) {
+    const parts = normalized.split("?");
+    const query = parts[1] || "";
+    return `https://images.unsplash.com/featured/150x150/?${query}`;
+  }
+
+  return normalized;
+}
 
 interface PDVViewProps {
   products: Produto[];
@@ -55,8 +152,48 @@ export default function PDVView({
 
   // Payment states
   const [linkClienteId, setLinkClienteId] = useState("");
-  const [formaPagamento, setFormaPagamento] = useState<Venda["formaPagamento"]>("PIX");
+  const [formaPagamento, setFormaPagamento] = useState<Venda["formaPagamento"] | null>(null);
   const [cashReceived, setCashReceived] = useState<string>("");
+
+  // PIX details from company settings
+  const [pixKey, setPixKey] = useState("pareeleve-supermarket-pix-key@bcb.br");
+  const [pixBeneficiary, setPixBeneficiary] = useState("Pare e Leve S/A");
+  const [pixCity, setPixCity] = useState("SAO PAULO");
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("pare_leve_company_details");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.pixKey) setPixKey(parsed.pixKey);
+        if (parsed.pixBeneficiary) setPixBeneficiary(parsed.pixBeneficiary);
+        if (parsed.pixCity) setPixCity(parsed.pixCity);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar dados do PIX para o PDV", err);
+    }
+  }, [formaPagamento]);
+
+  // Paylater States
+  const [paylaterClientName, setPaylaterClientName] = useState("");
+  const [paylaterDueDate, setPaylaterDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split("T")[0];
+  });
+  const [paylaterPurchaseDate, setPaylaterPurchaseDate] = useState(() => new Date().toISOString().split("T")[0]);
+
+  // Synchronize selected client name with typed client name for paylater
+  React.useEffect(() => {
+    if (linkClienteId) {
+      const selected = clients.find((c) => c.id === linkClienteId);
+      if (selected) {
+        setPaylaterClientName(selected.nome);
+      }
+    } else {
+      setPaylaterClientName("");
+    }
+  }, [linkClienteId, clients]);
 
   // Session initial opening float state
   const [openingFloat, setOpeningFloat] = useState<number>(150);
@@ -64,6 +201,7 @@ export default function PDVView({
 
   // Receipt popup state
   const [receiptVenda, setReceiptVenda] = useState<Venda | null>(null);
+  const [showPixPopup, setShowPixPopup] = useState(false);
 
   // Categories list
   const categories = ["Todas", ...Array.from(new Set(products.map((p) => p.categoria)))];
@@ -185,15 +323,23 @@ export default function PDVView({
       alert("Adicione produtos ao carrinho antes da liquidação.");
       return;
     }
+    if (!formaPagamento) {
+      alert("Por favor, selecione uma forma de pagamento antes de fechar a venda.");
+      return;
+    }
     if (formaPagamento === "Dinheiro" && (parseFloat(cashReceived) || 0) < total) {
       alert("Valor pago menor que o total da compra.");
+      return;
+    }
+    if (formaPagamento === "Paylater" && !paylaterClientName.trim()) {
+      alert("Por favor, insira o nome do cliente para a venda Paylater.");
       return;
     }
 
     const linkedClient = clients.find((c) => c.id === linkClienteId);
 
     const novaVenda: Omit<Venda, "id"> = {
-      data: new Date().toISOString(),
+      data: formaPagamento === "Paylater" ? new Date(paylaterPurchaseDate + "T12:00:00").toISOString() : new Date().toISOString(),
       itens: cart.map((item, index) => ({
         ...item,
         id: `itv-${index}-${Date.now()}`
@@ -203,7 +349,9 @@ export default function PDVView({
       total,
       formaPagamento,
       clienteId: linkedClient?.id,
-      clienteNome: linkedClient?.nome,
+      clienteNome: formaPagamento === "Paylater" ? paylaterClientName.trim() : (linkedClient?.nome || "Consumidor Avulso"),
+      paylaterDueDate: formaPagamento === "Paylater" ? paylaterDueDate : undefined,
+      paylaterPurchaseDate: formaPagamento === "Paylater" ? paylaterPurchaseDate : undefined,
     };
 
     // Trigger parent action
@@ -221,6 +369,8 @@ export default function PDVView({
     setDiscountValue(0);
     setCashReceived("");
     setLinkClienteId("");
+    setPaylaterClientName("");
+    setFormaPagamento(null);
   };
 
   return (
@@ -479,36 +629,98 @@ export default function PDVView({
             {/* Liquidation controls */}
             <div className="space-y-3">
               <span className="text-[10px] text-gray-400 font-semibold block uppercase font-mono">Forma de Pagamento</span>
-              <div className="grid grid-cols-4 gap-2 text-[10px] font-semibold text-white">
+              <div className="grid grid-cols-5 gap-1.5 text-[10px] font-semibold text-white">
                 <button
-                  onClick={() => setFormaPagamento("PIX")}
-                  className={`py-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all ${formaPagamento === "PIX" ? "bg-cyan-500/10 border-cyan-500 text-cyan-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
+                  onClick={() => {
+                    if (cart.length === 0) {
+                      alert("Por favor, adicione produtos ao carrinho antes de pagar com PIX.");
+                      return;
+                    }
+                    setFormaPagamento("PIX");
+                    setShowPixPopup(true);
+                  }}
+                  className={`py-3 rounded-xl border flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${formaPagamento === "PIX" ? "bg-cyan-500/10 border-cyan-500 text-cyan-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
                 >
-                  <QrCode className="w-5 h-5 text-cyan-400" />
+                  <QrCode className="w-4 h-4 text-cyan-400" />
                   PIX
                 </button>
                 <button
                   onClick={() => setFormaPagamento("Crédito")}
-                  className={`py-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all ${formaPagamento === "Crédito" ? "bg-blue-500/10 border-blue-500 text-blue-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
+                  className={`py-3 rounded-xl border flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${formaPagamento === "Crédito" ? "bg-blue-500/10 border-blue-500 text-blue-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
                 >
-                  <CreditCard className="w-5 h-5 text-blue-400" />
+                  <CreditCard className="w-4 h-4 text-blue-400" />
                   Crédito
                 </button>
                 <button
                   onClick={() => setFormaPagamento("Débito")}
-                  className={`py-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all ${formaPagamento === "Débito" ? "bg-indigo-500/10 border-indigo-500 text-indigo-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
+                  className={`py-3 rounded-xl border flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${formaPagamento === "Débito" ? "bg-indigo-500/10 border-indigo-500 text-indigo-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
                 >
-                  <CreditCard className="w-5 h-5 text-indigo-400" />
+                  <CreditCard className="w-4 h-4 text-indigo-400" />
                   Débito
                 </button>
                 <button
                   onClick={() => setFormaPagamento("Dinheiro")}
-                  className={`py-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all ${formaPagamento === "Dinheiro" ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
+                  className={`py-3 rounded-xl border flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${formaPagamento === "Dinheiro" ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
                 >
-                  <DollarSign className="w-5 h-5 text-emerald-400" />
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
                   Dinheiro
                 </button>
+                <button
+                  onClick={() => setFormaPagamento("Paylater")}
+                  className={`py-3 rounded-xl border flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${formaPagamento === "Paylater" ? "bg-amber-500/10 border-amber-500 text-amber-400" : "bg-[#1E293B] border-white/5 hover:bg-[#1E293B]/70"}`}
+                >
+                  <Clock className="w-4 h-4 text-amber-400" />
+                  Paylater
+                </button>
               </div>
+
+
+
+              {/* Paylater specifics */}
+              {formaPagamento === "Paylater" && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="bg-amber-950/20 border border-amber-500/10 p-3.5 rounded-2xl space-y-3"
+                >
+                  <h4 className="text-[11px] font-bold text-amber-400 uppercase tracking-wider font-mono">Dados do Contrato Paylater</h4>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-gray-400 block font-medium">Nome do Cliente para Lançamento</label>
+                    <input
+                      type="text"
+                      required
+                      value={paylaterClientName}
+                      onChange={(e) => setPaylaterClientName(e.target.value)}
+                      placeholder="Inserir nome do cliente..."
+                      className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-2.5 text-xs text-white outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 block font-medium">Dia da Compra</label>
+                      <input
+                        type="date"
+                        required
+                        value={paylaterPurchaseDate}
+                        onChange={(e) => setPaylaterPurchaseDate(e.target.value)}
+                        className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-2.5 text-xs text-white font-mono outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 block font-medium">Data de Vencimento</label>
+                      <input
+                        type="date"
+                        required
+                        value={paylaterDueDate}
+                        onChange={(e) => setPaylaterDueDate(e.target.value)}
+                        className="w-full bg-[#1E293B] border border-white/10 rounded-xl p-2.5 text-xs text-white font-mono outline-none"
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Dinheiro specifics (cash change calculation helper) */}
               {formaPagamento === "Dinheiro" && (
@@ -555,6 +767,7 @@ export default function PDVView({
                       setLinkClienteId("");
                       setDiscountValue(0);
                       setCashReceived("");
+                      setFormaPagamento(null);
                     }}
                     className="w-full bg-red-500/10 hover:bg-red-600 hover:text-white border border-red-500/20 text-red-400 font-semibold py-2.5 px-4 rounded-xl text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
                   >
@@ -617,7 +830,7 @@ export default function PDVView({
                       {/* Product photo with quick badges */}
                       <div className="relative w-full h-20 rounded-xl overflow-hidden mb-2 bg-[#0F172A] border border-white/5">
                         <img
-                          src={prod.fotoUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=150"}
+                          src={getProductImage(prod.fotoUrl, prod.nome, prod.marca)}
                           alt={prod.nome}
                           className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300"
                         />
@@ -737,6 +950,89 @@ export default function PDVView({
                 <Printer className="w-4 h-4 text-orange-400" />
                 Imprimir Via Física
               </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* 4. PIX Payment Popup Modal */}
+      {showPixPopup && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-full max-w-sm bg-[#1E293B] border border-cyan-500/30 rounded-3xl p-6 relative shadow-2xl text-white font-sans"
+          >
+            <button
+              onClick={() => setShowPixPopup(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-xl transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="p-3 bg-cyan-500/10 rounded-2xl border border-cyan-500/20 text-cyan-400">
+                <QrCode className="w-8 h-8 font-bold animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white uppercase tracking-wider font-mono">Pagamento via PIX</h3>
+                <p className="text-xs text-gray-400 mt-1">Escaneie o código abaixo com o aplicativo de seu banco</p>
+              </div>
+
+              {/* QR Code Container */}
+              <div className="p-3 bg-white rounded-2xl shadow-xl border border-cyan-500/20 flex items-center justify-center">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&color=0891b2&data=${encodeURIComponent(generatePixPayload(pixKey, pixBeneficiary, pixCity, total))}`}
+                  alt="QR Code PIX"
+                  className="w-[160px] h-[160px]"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+
+              {/* Value Indicator */}
+              <div className="bg-[#0F172A] border border-white/5 rounded-2xl p-4 w-full divide-y divide-white/5 space-y-2 text-xs text-left">
+                <div className="flex justify-between items-center pb-2">
+                  <span className="text-gray-400">Total a Pagar</span>
+                  <span className="font-extrabold text-[#FF6B00] text-sm font-mono">R$ {total.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2">
+                  <span className="text-gray-400">Favorecido</span>
+                  <span className="font-semibold text-gray-200 truncate max-w-[180px] text-[11px] text-right">{pixBeneficiary}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2">
+                  <span className="text-gray-400">Chave</span>
+                  <span className="font-mono text-gray-300 text-[10px] truncate max-w-[180px] text-right">{pixKey}</span>
+                </div>
+              </div>
+
+              {/* Actions inside PIX Modal */}
+              <div className="w-full space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const payload = generatePixPayload(pixKey, pixBeneficiary, pixCity, total);
+                    navigator.clipboard.writeText(payload);
+                    alert(`Código PIX 'Copia e Cola' de R$ ${total.toFixed(2)} copiado com sucesso!`);
+                  }}
+                  className="w-full bg-[#1E293B]/80 hover:bg-[#1E293B] text-cyan-400 font-bold py-2.5 px-4 rounded-xl border border-cyan-500/30 text-xs transition-all flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Copiar Código "Copia e Cola"
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPixPopup(false);
+                    handleCheckoutCommit();
+                    alert("Venda com pagamento PIX registrada e cupom emitido!");
+                  }}
+                  className="w-full bg-cyan-500 hover:bg-cyan-600 font-bold py-3 px-4 rounded-xl shadow-lg shadow-cyan-500/20 text-black text-xs transition-all uppercase tracking-wider active:scale-98 flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4 text-black" />
+                  Confirmar e Concluir Venda
+                </button>
+              </div>
             </div>
           </motion.div>
         </div>

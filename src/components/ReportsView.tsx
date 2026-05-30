@@ -14,7 +14,15 @@ import {
   Calendar,
   Layers,
   Sparkles,
-  Download
+  Download,
+  Clock,
+  ArrowRight,
+  Search,
+  ChevronRight,
+  CreditCard,
+  X,
+  FileSpreadsheet,
+  Check
 } from "lucide-react";
 import {
   AreaChart,
@@ -44,8 +52,16 @@ export default function ReportsView({
   payables,
   receivables,
 }: ReportsProps) {
-  const [selectedReport, setSelectedReport] = useState<"vendas" | "margens" | "vencimentos">("vendas");
+  const [selectedReport, setSelectedReport] = useState<"vendas" | "margens" | "vencimentos" | "historico">("vendas");
   const [reportPeriod, setReportPeriod] = useState<"dia" | "semana" | "mes" | "ano" | "todos">("mes");
+
+  // Sales History View States
+  const [historyYearFilter, setHistoryYearFilter] = useState<string>("2026");
+  const [historyMonthFilter, setHistoryMonthFilter] = useState<string>("Todos");
+  const [historyDayFilter, setHistoryDayFilter] = useState<string>("Todos");
+  const [historySearchTerm, setHistorySearchTerm] = useState<string>("");
+  const [historyActiveViewType, setHistoryActiveViewType] = useState<"grupo-dia" | "grupo-mes" | "grupo-ano" | "todas-vendas">("todas-vendas");
+  const [selectedDetailedSale, setSelectedDetailedSale] = useState<Venda | null>(null);
 
   // Dynamically calculate reference date to support simulated and current sales periods
   const referenceDate = useMemo(() => {
@@ -227,6 +243,142 @@ export default function ReportsView({
     }).filter(item => item.Receita > 0);
   }, [filteredSales, products]);
 
+  // Sales History Memo Calculations
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    sales.forEach(s => {
+      try {
+        const y = new Date(s.data).getFullYear().toString();
+        if (y && y !== "NaN") years.add(y);
+      } catch (e) {}
+    });
+    years.add("2026");
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [sales]);
+
+  const MONTHS_LIST = useMemo(() => [
+    { value: "Todos", label: "Todos os Meses" },
+    { value: "01", label: "Janeiro" },
+    { value: "02", label: "Fevereiro" },
+    { value: "03", label: "Março" },
+    { value: "04", label: "Abril" },
+    { value: "05", label: "Maio" },
+    { value: "06", label: "Junho" },
+    { value: "07", label: "Julho" },
+    { value: "08", label: "Agosto" },
+    { value: "09", label: "Setembro" },
+    { value: "10", label: "Outubro" },
+    { value: "11", label: "Novembro" },
+    { value: "12", label: "Dezembro" },
+  ], []);
+
+  const filteredHistorySales = useMemo(() => {
+    return sales.filter((s) => {
+      const saleDate = new Date(s.data);
+      if (isNaN(saleDate.getTime())) return false;
+
+      const y = saleDate.getFullYear().toString();
+      const m = (saleDate.getMonth() + 1).toString().padStart(2, "0");
+      const d = saleDate.getDate().toString().padStart(2, "0");
+
+      if (historyYearFilter !== "Todos" && y !== historyYearFilter) return false;
+      if (historyMonthFilter !== "Todos" && m !== historyMonthFilter) return false;
+      if (historyDayFilter !== "Todos" && d !== historyDayFilter) return false;
+
+      if (historySearchTerm.trim()) {
+        const term = historySearchTerm.toLowerCase();
+        const matchesClient = s.clienteNome?.toLowerCase().includes(term);
+        const matchesId = s.id.toLowerCase().includes(term);
+        const matchesForma = s.formaPagamento.toLowerCase().includes(term);
+        const matchesItems = s.itens.some(item => item.nomeProduto.toLowerCase().includes(term));
+        if (!matchesClient && !matchesId && !matchesForma && !matchesItems) return false;
+      }
+
+      return true;
+    });
+  }, [sales, historyYearFilter, historyMonthFilter, historyDayFilter, historySearchTerm]);
+
+  const salesGroupedByDay = useMemo(() => {
+    const groups: { [dateStr: string]: { date: string; total: number; count: number; itemsCount: number; average: number } } = {};
+    
+    sales.forEach((s) => {
+      const dObj = new Date(s.data);
+      if (isNaN(dObj.getTime())) return;
+      const y = dObj.getFullYear().toString();
+      const m = (dObj.getMonth() + 1).toString().padStart(2, "0");
+      const dateStr = s.data.split("T")[0]; // YYYY-MM-DD
+
+      if (historyYearFilter !== "Todos" && y !== historyYearFilter) return;
+      if (historyMonthFilter !== "Todos" && m !== historyMonthFilter) return;
+
+      if (!groups[dateStr]) {
+        groups[dateStr] = { date: dateStr, total: 0, count: 0, itemsCount: 0, average: 0 };
+      }
+      groups[dateStr].total += s.total;
+      groups[dateStr].count += 1;
+      groups[dateStr].itemsCount += s.itens.reduce((sum, item) => sum + item.quantidade, 0);
+    });
+
+    return Object.values(groups).map(g => ({
+      ...g,
+      average: g.count > 0 ? g.total / g.count : 0
+    })).sort((a, b) => b.date.localeCompare(a.date));
+  }, [sales, historyYearFilter, historyMonthFilter]);
+
+  const salesGroupedByMonth = useMemo(() => {
+    const groups: { [monthStr: string]: { month: string; year: string; total: number; count: number; itemsCount: number; average: number } } = {};
+
+    sales.forEach((s) => {
+      const dObj = new Date(s.data);
+      if (isNaN(dObj.getTime())) return;
+      const y = dObj.getFullYear().toString();
+      const m = (dObj.getMonth() + 1).toString().padStart(2, "0");
+      const monthStr = `${y}-${m}`;
+
+      if (historyYearFilter !== "Todos" && y !== historyYearFilter) return;
+
+      if (!groups[monthStr]) {
+        groups[monthStr] = { month: m, year: y, total: 0, count: 0, itemsCount: 0, average: 0 };
+      }
+      groups[monthStr].total += s.total;
+      groups[monthStr].count += 1;
+      groups[monthStr].itemsCount += s.itens.reduce((sum, item) => sum + item.quantidade, 0);
+    });
+
+    const monthLabelsMap: { [key: string]: string } = {
+      "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril", "05": "Maio", "06": "Junho",
+      "07": "Julho", "08": "Agosto", "09": "Setembro", "10": "Outubro", "11": "Novembro", "12": "Dezembro"
+    };
+
+    return Object.values(groups).map(g => ({
+      ...g,
+      label: `${monthLabelsMap[g.month] || g.month} de ${g.year}`,
+      average: g.count > 0 ? g.total / g.count : 0
+    })).sort((a, b) => `${b.year}-${b.month}`.localeCompare(`${a.year}-${a.month}`));
+  }, [sales, historyYearFilter]);
+
+  const salesGroupedByYear = useMemo(() => {
+    const groups: { [year: string]: { year: string; total: number; count: number; itemsCount: number; average: number } } = {};
+
+    sales.forEach((s) => {
+      const dObj = new Date(s.data);
+      if (isNaN(dObj.getTime())) return;
+      const y = dObj.getFullYear().toString();
+
+      if (!groups[y]) {
+        groups[y] = { year: y, total: 0, count: 0, itemsCount: 0, average: 0 };
+      }
+      groups[y].total += s.total;
+      groups[y].count += 1;
+      groups[y].itemsCount += s.itens.reduce((sum, item) => sum + item.quantidade, 0);
+    });
+
+    return Object.values(groups).map(g => ({
+      ...g,
+      average: g.count > 0 ? g.total / g.count : 0
+    })).sort((a, b) => b.year.localeCompare(a.year));
+  }, [sales]);
+
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -292,6 +444,40 @@ export default function ReportsView({
             `).join("")}
           </tbody>
         </table>
+      `;
+    } else if (selectedReport === "historico") {
+      title = "Histórico Detalhado de Vendas (Filtrado)";
+      const selMonthLabel = historyMonthFilter === "Todos" ? "Todos os Meses" : (MONTHS_LIST.find(m => m.value === historyMonthFilter)?.label || historyMonthFilter);
+      contentHtml = `
+        <p>Abaixo consta a listagem das vendas detalhadas realizadas, conforme os filtros operacionais selecionados:</p>
+        <p><strong>Filtro Temporal:</strong> Ano ${historyYearFilter} | Mês: ${selMonthLabel} | Dia: ${historyDayFilter}</p>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID da Venda</th>
+              <th>Data/Hora</th>
+              <th>Forma Pagto</th>
+              <th>Cliente</th>
+              <th style="text-align: right;">Itens</th>
+              <th style="text-align: right;">Total da Venda</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredHistorySales.map(v => `
+              <tr>
+                <td style="font-family: monospace;">${v.id}</td>
+                <td>${new Date(v.data).toLocaleString("pt-BR")}</td>
+                <td>${v.formaPagamento}</td>
+                <td>${v.clienteNome || "Consumidor Geral"}</td>
+                <td style="text-align: right;">${v.itens.reduce((sum, item) => sum + item.quantidade, 0)} un</td>
+                <td style="text-align: right; font-weight: bold; font-family: monospace;">${fmt(v.total)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div style="margin-top: 25px; text-align: right; font-size: 14px; font-weight: bold; border-top: 1px solid #eee; padding-top: 15px;">
+          Faturamento Total no Período: ${fmt(filteredHistorySales.reduce((sum, s) => sum + s.total, 0))}
+        </div>
       `;
     } else if (selectedReport === "margens") {
       title = "Relatório de DRE por Categoria de Produto";
@@ -427,12 +613,18 @@ export default function ReportsView({
       {/* Dynamic select buttons and layout */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#0F172A] border border-white/5 p-4 rounded-3xl shadow-xl">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex bg-[#1E293B] p-1.5 rounded-2xl border border-white/5">
+          <div className="flex bg-[#1E293B] p-1.5 rounded-2xl border border-white/5 flex-wrap overflow-x-auto">
             <button
               onClick={() => setSelectedReport("vendas")}
               className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${selectedReport === "vendas" ? "bg-[#FF6B00] text-white" : "text-gray-400 hover:text-white"}`}
             >
               Vendas & Evolução
+            </button>
+            <button
+              onClick={() => setSelectedReport("historico")}
+              className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${selectedReport === "historico" ? "bg-[#FF6B00] text-white" : "text-gray-400 hover:text-white"}`}
+            >
+              Histórico de Vendas
             </button>
             <button
               onClick={() => setSelectedReport("margens")}
@@ -449,7 +641,7 @@ export default function ReportsView({
           </div>
 
           {/* Period Filter for report data */}
-          {selectedReport !== "vencimentos" && (
+          {selectedReport !== "vencimentos" && selectedReport !== "historico" && (
             <div className="flex bg-black/45 border border-white/5 p-1 rounded-xl shrink-0">
               {(["dia", "semana", "mes", "ano", "todos"] as const).map((p) => (
                 <button
@@ -656,6 +848,627 @@ export default function ReportsView({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {selectedReport === "historico" && (
+        <div className="space-y-6">
+          {/* Header Description */}
+          <div className="bg-sky-950/20 border border-sky-500/10 p-5 rounded-3xl text-xs text-sky-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-5 h-5 text-sky-400" />
+              <h4 className="font-semibold text-sm">Explorador & Histórico Consolidado de Vendas</h4>
+            </div>
+            <p>
+              Consulte e agrupe todas as transações realizadas no estabelecimento. Altere a forma de agrupamento para totalizar os faturamentos **por Dia**, **por Mês** ou **por Ano** automaticamente, com suporte a filtros e detalhamento de dados por cupom emitido.
+            </p>
+          </div>
+
+          {/* Interactive Filters Bar */}
+          <div className="bg-[#0F172A] border border-white/5 p-5 rounded-3xl shadow-xl space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <h3 className="text-white text-sm font-semibold flex items-center gap-2">
+                <Search className="w-4 h-4 text-[#FF6B00]" />
+                Painel de Filtros
+              </h3>
+              <div className="flex flex-wrap items-center gap-3">
+                {/* View Type buttons (Grouping Options) */}
+                <div className="flex bg-[#1E293B] p-1 rounded-xl border border-white/5">
+                  <button
+                    onClick={() => setHistoryActiveViewType("todas-vendas")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${historyActiveViewType === "todas-vendas" ? "bg-[#FF6B00] text-white" : "text-gray-400 hover:text-white"}`}
+                  >
+                    Vendas Detalhadas
+                  </button>
+                  <button
+                    onClick={() => setHistoryActiveViewType("grupo-dia")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${historyActiveViewType === "grupo-dia" ? "bg-[#FF6B00] text-white" : "text-gray-400 hover:text-white"}`}
+                  >
+                    Agrupado por Dia
+                  </button>
+                  <button
+                    onClick={() => setHistoryActiveViewType("grupo-mes")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${historyActiveViewType === "grupo-mes" ? "bg-[#FF6B00] text-white" : "text-gray-400 hover:text-white"}`}
+                  >
+                    Agrupado por Mês
+                  </button>
+                  <button
+                    onClick={() => setHistoryActiveViewType("grupo-ano")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${historyActiveViewType === "grupo-ano" ? "bg-[#FF6B00] text-white" : "text-gray-400 hover:text-white"}`}
+                  >
+                    Agrupado por Ano
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 pt-2">
+              {/* Year filter input */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-gray-500 uppercase font-mono font-bold">Filtrar por Ano</label>
+                <select
+                  value={historyYearFilter}
+                  onChange={(e) => {
+                    setHistoryYearFilter(e.target.value);
+                    setHistoryDayFilter("Todos");
+                  }}
+                  className="bg-[#1E293B] border border-white/5 text-white rounded-xl py-2 px-3 text-xs outline-none focus:border-[#FF6B00]/40 transition-colors"
+                >
+                  <option value="Todos">Todos os Anos</option>
+                  {availableYears.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Month filter input */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-gray-500 uppercase font-mono font-bold">Filtrar por Mês</label>
+                <select
+                  value={historyMonthFilter}
+                  disabled={historyActiveViewType === "grupo-ano"}
+                  onChange={(e) => {
+                    setHistoryMonthFilter(e.target.value);
+                    setHistoryDayFilter("Todos");
+                  }}
+                  className="bg-[#1E293B] border border-white/5 text-white rounded-xl py-2 px-3 text-xs outline-none focus:border-[#FF6B00]/40 transition-colors disabled:opacity-40"
+                >
+                  {MONTHS_LIST.map(mo => (
+                    <option key={mo.value} value={mo.value}>{mo.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Day filter input */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-gray-500 uppercase font-mono font-bold">Filtrar por Dia</label>
+                <select
+                  value={historyDayFilter}
+                  disabled={historyActiveViewType === "grupo-mes" || historyActiveViewType === "grupo-ano"}
+                  onChange={(e) => setHistoryDayFilter(e.target.value)}
+                  className="bg-[#1E293B] border border-white/5 text-white rounded-xl py-2 px-3 text-xs outline-none focus:border-[#FF6B00]/40 transition-colors disabled:opacity-40"
+                >
+                  <option value="Todos">Todos os Dias</option>
+                  {Array.from({ length: 31 }, (_, idx) => {
+                    const dayStr = (idx + 1).toString().padStart(2, "0");
+                    return <option key={dayStr} value={dayStr}>{dayStr}</option>;
+                  })}
+                </select>
+              </div>
+
+              {/* Text search box */}
+              <div className="flex flex-col lg:col-span-2 gap-1 col-span-1">
+                <label className="text-[10px] text-gray-500 uppercase font-mono font-bold">Buscar Transação</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={historySearchTerm}
+                    onChange={(e) => setHistorySearchTerm(e.target.value)}
+                    placeholder="Buscar por ID, Cliente, Forma de Pagto..."
+                    className="w-full bg-[#1E293B] border border-white/5 text-white rounded-xl py-2 pl-9 pr-3 text-xs outline-none focus:border-[#FF6B00]/40 transition-colors placeholder:text-gray-500"
+                  />
+                  <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-3" />
+                </div>
+              </div>
+            </div>
+
+            {/* Quick reset of filters */}
+            {(historyYearFilter !== "Todos" || historyMonthFilter !== "Todos" || historyDayFilter !== "Todos" || historySearchTerm !== "") && (
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => {
+                    setHistoryYearFilter("Todos");
+                    setHistoryMonthFilter("Todos");
+                    setHistoryDayFilter("Todos");
+                    setHistorySearchTerm("");
+                  }}
+                  className="text-[#FF6B00] hover:text-[#FF6B00]/80 text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  Limpar Todos os Filtros
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Statistics Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-[#0F172A] border border-white/5 p-5 rounded-2xl">
+              <span className="text-[10px] text-gray-500 uppercase font-mono">Faturamento Filtrado</span>
+              <div className="text-xl font-bold text-emerald-400 mt-1">
+                R$ {filteredHistorySales.reduce((sum, s) => sum + s.total, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">Transações que correspondem aos filtros</p>
+            </div>
+            <div className="bg-[#0F172A] border border-white/5 p-5 rounded-2xl">
+              <span className="text-[10px] text-gray-500 uppercase font-mono">Número de Cupons</span>
+              <div className="text-xl font-bold text-white mt-1">
+                {filteredHistorySales.length} {filteredHistorySales.length === 1 ? "venda" : "vendas"}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">Sessões de PDV fechadas</p>
+            </div>
+            <div className="bg-[#0F172A] border border-white/5 p-5 rounded-2xl">
+              <span className="text-[10px] text-[#FF6B00] uppercase font-mono font-bold">Ticket Médio</span>
+              <div className="text-xl font-bold text-[#FF6B00] mt-1">
+                R$ {(filteredHistorySales.length > 0 ? (filteredHistorySales.reduce((sum, s) => sum + s.total, 0) / filteredHistorySales.length) : 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">Média gasta por cliente/carrinho</p>
+            </div>
+            <div className="bg-[#0F172A] border border-white/5 p-5 rounded-2xl">
+              <span className="text-[10px] text-gray-500 uppercase font-mono">Unidades Vendidas</span>
+              <div className="text-xl font-bold text-sky-400 mt-1">
+                {filteredHistorySales.reduce((sum, s) => sum + s.itens.reduce((sumIt, it) => sumIt + it.quantidade, 0), 0)} un
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">Total de produtos retirados do estoque</p>
+            </div>
+          </div>
+
+          {/* Results Tables according to Selection Mode */}
+          <div className="bg-[#0F172A] border border-white/5 p-6 rounded-3xl shadow-xl space-y-4">
+            
+            {/* 1. TODAS AS VENDAS DETALHADAS */}
+            {historyActiveViewType === "todas-vendas" && (
+              <div className="overflow-x-auto text-xs text-gray-300">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/5 text-gray-400 uppercase text-[10px] font-mono">
+                      <th className="py-3 px-3">Código Cupom</th>
+                      <th className="py-3 px-3">Data e Hora</th>
+                      <th className="py-3 px-3">Cliente</th>
+                      <th className="py-3 px-3 text-center">Itens comprados</th>
+                      <th className="py-3 px-3">Forma Pagto</th>
+                      <th className="py-3 px-3 text-right">Valor Total</th>
+                      <th className="py-3 px-3 text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-xs text-gray-300">
+                    {filteredHistorySales.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-10 text-center text-gray-500 font-mono">
+                          Nenhuma venda localizada para os filtros aplicados.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredHistorySales.map((sale) => (
+                        <tr key={sale.id} className="hover:bg-white/5 transition-colors group">
+                          <td className="py-3 px-3 font-mono text-gray-400 group-hover:text-white transition-colors">{sale.id}</td>
+                          <td className="py-3 px-3">
+                            <span className="font-semibold text-white">
+                              {new Date(sale.data).toLocaleDateString("pt-BR")}
+                            </span>{" "}
+                            <span className="text-gray-500 font-mono text-[10px]">
+                              {new Date(sale.data).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="text-white font-medium">{sale.clienteNome || "Consumidor Geral"}</div>
+                            <div className="text-[10px] text-gray-500 font-mono">{sale.clienteId ? "Cliente Fidelidade" : "Sem identificação"}</div>
+                          </td>
+                          <td className="py-3 px-3 text-center text-sky-400 font-semibold">
+                            {sale.itens.reduce((sum, it) => sum + it.quantidade, 0)} un
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              sale.formaPagamento === "PIX" ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/20" :
+                              sale.formaPagamento === "Dinheiro" ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" :
+                              sale.formaPagamento === "Paylater" ? "bg-amber-500/15 text-amber-400 border border-amber-500/20" :
+                              "bg-blue-500/15 text-blue-400 border border-blue-500/20"
+                            }`}>
+                              {sale.formaPagamento}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-white">
+                            R$ {sale.total.toFixed(2)}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              onClick={() => setSelectedDetailedSale(sale)}
+                              className="bg-white/5 hover:bg-[#FF6B00] hover:text-white border border-white/10 px-3 py-1.5 rounded-lg font-bold text-[#FF6B00] transition-colors inline-flex items-center gap-1 active:scale-[0.98]"
+                            >
+                              Ver Cupom
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 2. AGRUPADO POR DIA */}
+            {historyActiveViewType === "grupo-dia" && (
+              <div className="overflow-x-auto text-xs text-gray-300">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/5 text-gray-400 uppercase text-[10px] font-mono">
+                      <th className="py-3 px-3">Dia da Operação</th>
+                      <th className="py-3 px-3 text-center">Cupons Emitidos</th>
+                      <th className="py-3 px-3 text-center">Itens Saídos (un)</th>
+                      <th className="py-3 px-3 text-right">Ticket Médio</th>
+                      <th className="py-3 px-3 text-right">Faturamento Total</th>
+                      <th className="py-3 px-3 text-center">Ação Detalhar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-xs text-gray-300">
+                    {salesGroupedByDay.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-gray-500 font-mono">
+                          Nenhum faturamento diário encontrado para as configurações de filtro.
+                        </td>
+                      </tr>
+                    ) : (
+                      salesGroupedByDay.map((grp) => {
+                        const dateFormatted = new Date(grp.date + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+                        return (
+                          <tr key={grp.date} className="hover:bg-white/5 transition-colors">
+                            <td className="py-3.5 px-3">
+                              <div className="font-bold text-white">{new Date(grp.date + "T12:00:00").toLocaleDateString("pt-BR")}</div>
+                              <div className="text-[10px] text-gray-500 capitalize">{dateFormatted}</div>
+                            </td>
+                            <td className="py-3.5 px-3 text-center text-white font-semibold font-mono">{grp.count}</td>
+                            <td className="py-3.5 px-3 text-center text-sky-400 font-semibold font-mono">{grp.itemsCount} un</td>
+                            <td className="py-3.5 px-3 text-right font-mono text-gray-300">R$ {grp.average.toFixed(2)}</td>
+                            <td className="py-3.5 px-3 text-right font-mono font-bold text-emerald-400">R$ {grp.total.toFixed(2)}</td>
+                            <td className="py-3.5 px-3 text-center">
+                              <button
+                                onClick={() => {
+                                  // Drill down to this day
+                                  const dateObj = new Date(grp.date + "T12:00:00");
+                                  setHistoryYearFilter(dateObj.getFullYear().toString());
+                                  setHistoryMonthFilter((dateObj.getMonth() + 1).toString().padStart(2, "0"));
+                                  setHistoryDayFilter(dateObj.getDate().toString().padStart(2, "0"));
+                                  setHistoryActiveViewType("todas-vendas");
+                                }}
+                                className="bg-sky-500/10 hover:bg-sky-500 border border-sky-500/20 text-sky-400 hover:text-white px-3 py-1.5 rounded-lg font-bold transition-all inline-flex items-center gap-1"
+                              >
+                                Filtrar Vendas do Dia
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 3. AGRUPADO POR MÊS */}
+            {historyActiveViewType === "grupo-mes" && (
+              <div className="overflow-x-auto text-xs text-gray-300">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/5 text-gray-400 uppercase text-[10px] font-mono">
+                      <th className="py-3 px-3">Mês da Venda</th>
+                      <th className="py-3 px-3 text-center">Cupons Emitidos</th>
+                      <th className="py-3 px-3 text-center">Itens Saídos (un)</th>
+                      <th className="py-3 px-3 text-right">Ticket Médio</th>
+                      <th className="py-3 px-3 text-right">Faturamento Total</th>
+                      <th className="py-3 px-3 text-center">Ação Detalhar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-xs text-gray-300">
+                    {salesGroupedByMonth.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-gray-500 font-mono">
+                          Nenhum faturamento mensal encontrado para as configurações.
+                        </td>
+                      </tr>
+                    ) : (
+                      salesGroupedByMonth.map((grp) => (
+                        <tr key={`${grp.year}-${grp.month}`} className="hover:bg-white/5 transition-colors">
+                          <td className="py-4 px-3">
+                            <div className="font-bold text-white text-sm">{grp.label}</div>
+                            <div className="text-[10px] text-gray-500 font-mono">Período de referência acumulado</div>
+                          </td>
+                          <td className="py-4 px-3 text-center text-white font-semibold font-mono">{grp.count}</td>
+                          <td className="py-4 px-3 text-center text-sky-400 font-semibold font-mono">{grp.itemsCount} un</td>
+                          <td className="py-4 px-3 text-right font-mono text-gray-300">R$ {grp.average.toFixed(2)}</td>
+                          <td className="py-4 px-3 text-right font-mono font-bold text-emerald-400">R$ {grp.total.toFixed(2)}</td>
+                          <td className="py-4 px-3 text-center">
+                            <button
+                              onClick={() => {
+                                // Drill down to this month
+                                setHistoryYearFilter(grp.year);
+                                setHistoryMonthFilter(grp.month);
+                                setHistoryDayFilter("Todos");
+                                setHistoryActiveViewType("grupo-dia");
+                              }}
+                              className="bg-indigo-500/10 hover:bg-indigo-500 border border-indigo-500/20 text-indigo-400 hover:text-white px-3 py-1.5 rounded-lg font-bold transition-all inline-flex items-center gap-1"
+                            >
+                              Ver Detalhes do Mês
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 4. AGRUPADO POR ANO */}
+            {historyActiveViewType === "grupo-ano" && (
+              <div className="overflow-x-auto text-xs text-gray-300">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/5 text-gray-400 uppercase text-[10px] font-mono">
+                      <th className="py-3 px-3">Exercício Fiscal (Ano)</th>
+                      <th className="py-3 px-3 text-center">Faturamento Registrado</th>
+                      <th className="py-3 px-3 text-center">Cupons Auditados</th>
+                      <th className="py-3 px-3 text-center">Itens Distribuidos</th>
+                      <th className="py-3 px-3 text-right">Faturamento Consolidado</th>
+                      <th className="py-3 px-3 text-center">Ação Detalhar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-xs text-gray-300">
+                    {salesGroupedByYear.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-gray-500 font-mono">
+                          Nenhum faturamento anual encontrado para este histórico.
+                        </td>
+                      </tr>
+                    ) : (
+                      salesGroupedByYear.map((grp) => (
+                        <tr key={grp.year} className="hover:bg-white/5 transition-colors">
+                          <td className="py-5 px-3">
+                            <div className="font-bold text-white text-base">Exercício de {grp.year}</div>
+                            <div className="text-[10px] text-gray-500 font-mono">Total acumulativo da loja</div>
+                          </td>
+                          <td className="py-5 px-3 text-center text-gray-300 font-mono">R$ {grp.average.toFixed(2)} (méd)</td>
+                          <td className="py-5 px-3 text-center text-white font-semibold font-mono">{grp.count} vendas</td>
+                          <td className="py-5 px-3 text-center text-sky-400 font-semibold font-mono">{grp.itemsCount} produtos</td>
+                          <td className="py-5 px-3 text-right font-mono font-bold text-emerald-400 text-sm">R$ {grp.total.toFixed(2)}</td>
+                          <td className="py-5 px-3 text-center">
+                            <button
+                              onClick={() => {
+                                // Drill down to this year
+                                setHistoryYearFilter(grp.year);
+                                setHistoryMonthFilter("Todos");
+                                setHistoryDayFilter("Todos");
+                                setHistoryActiveViewType("grupo-mes");
+                              }}
+                              className="bg-purple-500/10 hover:bg-purple-500 border border-purple-500/20 text-purple-400 hover:text-white px-3 py-1.5 rounded-lg font-bold transition-all inline-flex items-center gap-3"
+                            >
+                              Ver Meses deste Ano
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* DETAIL MODAL OVERLAY (RECEIPT VIEW) */}
+          {selectedDetailedSale && (
+            <div className="fixed inset-0 bg-black/85 flex items-center justify-center p-4 z-[999] backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-[#0F172A] border border-white/10 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+              >
+                {/* Header title */}
+                <div className="p-5 border-b border-white/5 flex items-center justify-between bg-[#1E293B]">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-[#FF6B00]" />
+                    <h3 className="font-bold text-white text-sm">CUPOM FISCAL DETALHADO #{selectedDetailedSale.id}</h3>
+                  </div>
+                  <button
+                    onClick={() => setSelectedDetailedSale(null)}
+                    className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Simulated Thermal Ticket wrapper */}
+                <div className="p-6 overflow-y-auto bg-gray-50 text-gray-800 font-sans flex-1">
+                  <div className="border border-dashed border-gray-300 p-4 bg-white rounded shadow-sm text-[11px] font-mono leading-relaxed space-y-3">
+                    {/* Establishment Info */}
+                    <div className="text-center space-y-1 pb-3 border-b border-gray-200">
+                      <div className="font-bold text-[12px] uppercase">PARE E LEVE SUPERMERCADO</div>
+                      <div>CNPJ: 14.509.323/0001-09</div>
+                      <div>Rua das Flores, 452 - Centro</div>
+                      <div>Telefone: (11) 3452-1920</div>
+                    </div>
+
+                    {/* Metadata */}
+                    <div className="space-y-1 pb-2 border-b border-gray-200 text-left">
+                      <div><strong>NFC-e Nº:</strong> {selectedDetailedSale.id}</div>
+                      <div><strong>DATA:</strong> {new Date(selectedDetailedSale.data).toLocaleString("pt-BR")}</div>
+                      <div><strong>OPERADOR:</strong> Jackson Pereira (PDV)</div>
+                      <div><strong>CLIENTE:</strong> {selectedDetailedSale.clienteNome || "Consumidor Geral"}</div>
+                    </div>
+
+                    {/* Sales items table */}
+                    <div className="space-y-1.5 pb-2 border-b border-gray-200">
+                      <div className="flex justify-between font-bold border-b border-gray-200 pb-1 uppercase">
+                        <div>Item / Descrição</div>
+                        <div className="text-right">QTD x V.UN = V.TOT</div>
+                      </div>
+                      {selectedDetailedSale.itens.map((it, index) => (
+                        <div key={it.id || index} className="flex justify-between text-left">
+                          <div className="truncate max-w-[180px]">{index + 1}. {it.nomeProduto}</div>
+                          <div className="text-right whitespace-nowrap shrink-0 ml-2">
+                            {it.quantidade} un x R$ {it.valorUnitario.toFixed(2)} = R$ {it.valorTotal.toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Financial sums and change */}
+                    <div className="space-y-1 text-right text-[12px] pb-2 border-b border-gray-200">
+                      <div className="flex justify-between">
+                        <div>SUBTOTAL:</div>
+                        <div>R$ {selectedDetailedSale.subtotal.toFixed(2)}</div>
+                      </div>
+                      {selectedDetailedSale.desconto > 0 && (
+                        <div className="flex justify-between text-red-600">
+                          <div>DESCONTO:</div>
+                          <div>-R$ {selectedDetailedSale.desconto.toFixed(2)}</div>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-[13px] border-t border-gray-100 pt-1">
+                        <div>VALOR LÍQUIDO:</div>
+                        <div>R$ {selectedDetailedSale.total.toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    {/* Payments modes */}
+                    <div className="space-y-1 text-left">
+                      <div><strong>FORMA PAGAMENTO:</strong> {selectedDetailedSale.formaPagamento}</div>
+                      <div className="text-[9px] text-gray-500 italic">Tributos incidentes (Lei 12741/12): Alíquota aprox. de C.O.G.S: 18% inclusa no preço.</div>
+                    </div>
+
+                    {/* Footer barcode/qrcode representation */}
+                    <div className="text-center pt-3 border-t border-gray-200 space-y-1.5">
+                      <div className="inline-block bg-gray-200 p-2 text-[10px] font-bold tracking-widest uppercase rounded">
+                        * {selectedDetailedSale.id} *
+                      </div>
+                      <div className="text-[9px] text-gray-500">OBRIGADO PELA PREFERÊNCIA! VOLTE SEMPRE!</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions bottom footer */}
+                <div className="p-4 border-t border-white/5 bg-[#1E293B] flex flex-wrap gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const printWindow = window.open("", "_blank");
+                      if (!printWindow) {
+                        alert("Favores autorize a abertura de pop-ups!");
+                        return;
+                      }
+                      const thermalContent = `
+                        <html>
+                        <head>
+                          <title>Imprimir Cupom ${selectedDetailedSale.id}</title>
+                          <style>
+                            @page { size: 80mm auto; margin: 0; }
+                            body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; margin: 4mm auto; padding: 0; background: #fff; color: #000; }
+                            .center { text-align: center; }
+                            .bold { font-weight: bold; }
+                            .title { font-size: 13px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+                            .dashed-line { border-bottom: 1px dashed #000; margin: 8px 0; }
+                            .flex-between { display: flex; justify-content: space-between; }
+                            table { width: 100%; border-collapse: collapse; }
+                            td { font-size: 11px; padding: 2px 0; }
+                            .text-right { text-align: right; }
+                          </style>
+                        </head>
+                        <body>
+                          <div class="center title">PARE E LEVE SUPERMERCADO</div>
+                          <div class="center">CNPJ: 14.509.323/0001-09</div>
+                          <div class="center">Rua das Flores, 452 - Centro</div>
+                          <div class="center">Telefone: (11) 3452-1920</div>
+                          <div class="dashed-line"></div>
+                          <div><b>NFC-e Nº:</b> ${selectedDetailedSale.id}</div>
+                          <div><b>DATA:</b> ${new Date(selectedDetailedSale.data).toLocaleString("pt-BR")}</div>
+                          <div><b>OPERADOR:</b> Jackson Pereira</div>
+                          <div><b>CLIENTE:</b> ${selectedDetailedSale.clienteNome || "Consumidor Geral"}</div>
+                          <div class="dashed-line"></div>
+                          <div class="bold flex-between">
+                            <span>DESCRIÇÃO</span>
+                            <span>VALOR</span>
+                          </div>
+                          <div class="dashed-line"></div>
+                          <table>
+                            ${selectedDetailedSale.itens.map((it, idx) => `
+                              <tr>
+                                <td>${idx + 1}. ${it.nomeProduto.substring(0, 20)}</td>
+                                <td class="text-right">${it.quantidade}x R$${it.valorUnitario.toFixed(2)} = R$${it.valorTotal.toFixed(2)}</td>
+                              </tr>
+                            `).join("")}
+                          </table>
+                          <div class="dashed-line"></div>
+                          <div class="flex-between">
+                            <span>SUBTOTAL:</span>
+                            <span>R$ ${selectedDetailedSale.subtotal.toFixed(2)}</span>
+                          </div>
+                          ${selectedDetailedSale.desconto > 0 ? `
+                          <div class="flex-between" style="color: red;">
+                            <span>DESCONTO:</span>
+                            <span>-R$ ${selectedDetailedSale.desconto.toFixed(2)}</span>
+                          </div>` : ""}
+                          <div class="flex-between bold font-size: 12px;">
+                            <span>VALOR LÍQUIDO:</span>
+                            <span>R$ ${selectedDetailedSale.total.toFixed(2)}</span>
+                          </div>
+                          <div class="dashed-line"></div>
+                          <div><b>FORMA PAGAMENTO:</b> ${selectedDetailedSale.formaPagamento}</div>
+                          <div class="dashed-line"></div>
+                          <div class="center" style="font-size: 10px;">OBRIGADO PELA PREFERÊNCIA! VOLTE SEMPRE!</div>
+                          <script>
+                            window.onload = function() {
+                              window.focus();
+                              window.print();
+                            }
+                          </script>
+                        </body>
+                        </html>
+                      `;
+                      printWindow.document.write(thermalContent);
+                      printWindow.document.close();
+                    }}
+                    className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold py-2 px-4 rounded-xl text-xs transition-all active:scale-[0.98] flex items-center gap-1.5"
+                  >
+                    <Printer className="w-4 h-4 text-sky-400" />
+                    Enviar p/ Impressora Termica
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedDetailedSale.id);
+                      alert("Segunda via identificadora copiada para área de transferência!");
+                    }}
+                    className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold py-2 px-4 rounded-xl text-xs transition-all active:scale-[0.98] flex items-center gap-1.5"
+                  >
+                    <Clock className="w-4 h-4 text-emerald-400" />
+                    Copiar Código ID
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDetailedSale(null)}
+                    className="bg-[#FF6B00] hover:bg-[#FF6B00]/80 text-white font-semibold py-2 px-4 rounded-xl text-xs transition-all active:scale-[0.98]"
+                  >
+                    Fechar Cupom
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </div>
       )}
     </div>
