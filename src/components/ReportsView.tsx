@@ -22,7 +22,8 @@ import {
   CreditCard,
   X,
   FileSpreadsheet,
-  Check
+  Check,
+  Trash2
 } from "lucide-react";
 import {
   AreaChart,
@@ -44,6 +45,8 @@ interface ReportsProps {
   sales: Venda[];
   payables: ContaPagar[];
   receivables: ContaReceber[];
+  currentUserRole?: string;
+  onDeleteSale?: (saleId: string) => void;
 }
 
 export default function ReportsView({
@@ -51,9 +54,15 @@ export default function ReportsView({
   sales,
   payables,
   receivables,
+  currentUserRole,
+  onDeleteSale,
 }: ReportsProps) {
   const [selectedReport, setSelectedReport] = useState<"vendas" | "margens" | "vencimentos" | "historico">("vendas");
   const [reportPeriod, setReportPeriod] = useState<"dia" | "semana" | "mes" | "ano" | "todos">("mes");
+
+  // Custom states for modal safe deletions and warnings without iframe constraints
+  const [saleToDelete, setSaleToDelete] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   // Sales History View States
   const [historyYearFilter, setHistoryYearFilter] = useState<string>("2026");
@@ -1081,13 +1090,28 @@ export default function ReportsView({
                             R$ {sale.total.toFixed(2)}
                           </td>
                           <td className="py-3 px-3 text-center">
-                            <button
-                              onClick={() => setSelectedDetailedSale(sale)}
-                              className="bg-white/5 hover:bg-[#FF6B00] hover:text-white border border-white/10 px-3 py-1.5 rounded-lg font-bold text-[#FF6B00] transition-colors inline-flex items-center gap-1 active:scale-[0.98]"
-                            >
-                              Ver Cupom
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => setSelectedDetailedSale(sale)}
+                                className="bg-white/5 hover:bg-[#FF6B00] hover:text-white border border-white/10 px-3 py-1.5 rounded-lg font-bold text-[#FF6B00] transition-colors inline-flex items-center gap-1 active:scale-[0.98]"
+                              >
+                                Ver Cupom
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (currentUserRole !== "Administrador") {
+                                    setRoleError("Apenas usuários Administradores podem excluir vendas permanentemente!");
+                                    return;
+                                  }
+                                  setSaleToDelete(sale.id);
+                                }}
+                                className="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 p-2 rounded-lg transition-colors active:scale-[0.95]"
+                                title="Excluir Venda (Apenas Administrador)"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -1469,6 +1493,63 @@ export default function ReportsView({
               </motion.div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal */}
+      {saleToDelete && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-[#1E293B] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+          >
+            <h3 className="text-lg font-bold text-white mb-2">Confirmar Exclusão de Venda</h3>
+            <p className="text-gray-300 text-sm mb-6">
+              Você tem certeza de que deseja excluir permanentemente a venda <span className="font-semibold text-red-400">#{saleToDelete}</span>? 
+              Esta ação recalculará todo o faturamento, lucro, histórico e estoque vinculado, bem como atualizará o banco de dados.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setSaleToDelete(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  onDeleteSale && onDeleteSale(saleToDelete);
+                  setSaleToDelete(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition-colors"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Access Denied Modal */}
+      {roleError && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-[#1E293B] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center"
+          >
+            <div className="text-red-500 text-4xl mb-4 font-bold flex justify-center">⚠️</div>
+            <h3 className="text-lg font-bold text-white mb-2">Acesso Restrito</h3>
+            <p className="text-gray-300 text-sm mb-6">
+              {roleError}
+            </p>
+            <button
+              onClick={() => setRoleError(null)}
+              className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-semibold transition-colors"
+            >
+              Entendido
+            </button>
+          </motion.div>
         </div>
       )}
     </div>

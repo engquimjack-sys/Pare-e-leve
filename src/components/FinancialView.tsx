@@ -20,7 +20,8 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
 import { ContaPagar, ContaReceber, Fornecedor, Cliente, Produto, Venda } from "../types";
 
@@ -35,6 +36,9 @@ interface FinancialViewProps {
   onReceiveBill: (id: string) => void;
   products?: Produto[];
   sales?: Venda[];
+  currentUserRole?: string;
+  onDeletePayable?: (id: string) => void;
+  onDeleteReceivable?: (id: string) => void;
 }
 
 export default function FinancialView({
@@ -48,10 +52,17 @@ export default function FinancialView({
   onReceiveBill,
   products = [],
   sales = [],
+  currentUserRole,
+  onDeletePayable,
+  onDeleteReceivable,
 }: FinancialViewProps) {
   // Local toggles
   const [activeTab, setActiveTab] = useState<"contas_pagar" | "contas_receber">("contas_pagar");
   const [isAddingBill, setIsAddingBill] = useState(false);
+
+  // Custom states for modal safe deletions and warnings without iframe constraints
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: "payable" | "receivable"; descricao: string } | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   // Filters & Row expansion for Contas a Receber (Paylater details)
   const [clientFilter, setClientFilter] = useState("");
@@ -498,16 +509,31 @@ export default function FinancialView({
                           </span>
                         </td>
                         <td className="py-3 px-2 text-right">
-                          {bill.status === "Pendente" ? (
+                          <div className="flex items-center justify-end gap-2">
+                            {bill.status === "Pendente" ? (
+                              <button
+                                onClick={() => onPayBill(bill.id)}
+                                className="text-[10px] bg-[#FF6B00]/10 hover:bg-[#FF6B00] hover:text-white border border-[#FF6B00]/20 px-2.5 py-1 rounded-lg transition-all active:scale-95 text-xs text-[#FF6B00] font-semibold"
+                              >
+                                Dar Baixa (Pagar)
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-gray-500 font-mono">Faturada OK</span>
+                            )}
                             <button
-                              onClick={() => onPayBill(bill.id)}
-                              className="text-[10px] bg-white/5 hover:bg-[#FF6B00]/15 hover:text-[#FF6B00] border border-white/10 px-2.5 py-1 rounded-lg transition-all active:scale-95 text-xs text-[#FF6B00] font-semibold"
+                              onClick={() => {
+                                if (currentUserRole !== "Administrador") {
+                                  setRoleError("Apenas usuários Administradores podem excluir lançamentos marcados no contas a pagar!");
+                                  return;
+                                }
+                                setDeleteConfirm({ id: bill.id, type: "payable", descricao: bill.descricao });
+                              }}
+                              className="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 p-2 rounded-lg transition-colors active:scale-[0.95]"
+                              title="Excluir Pagamento (Apenas Administrador)"
                             >
-                              Dar Baixa (Pagar)
+                              <Trash2 className="w-3" />
                             </button>
-                          ) : (
-                            <span className="text-[10px] text-gray-500 font-mono">Faturada OK</span>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -625,21 +651,36 @@ export default function FinancialView({
                                   {bill.status === "Recebido" ? "Recebido" : "Pendente"}
                                 </span>
                               </td>
-                              <td className="py-3 px-2 text-right">
-                                {bill.status === "Pendente" ? (
+                              <td className="py-3 px-2 text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-end gap-2">
+                                  {bill.status === "Pendente" ? (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation(); // Avoid triggering accordion expand
+                                        onReceiveBill(bill.id);
+                                      }}
+                                      className="text-[10px] bg-[#FF6B00]/10 hover:bg-[#FF6B00] hover:text-white border border-[#FF6B00]/20 px-2.5 py-1 rounded-lg transition-all active:scale-95 text-[#FF6B00] font-semibold"
+                                    >
+                                      Receber Duplicata
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-500 font-mono">Recebida OK</span>
+                                  )}
                                   <button
                                     onClick={(e) => {
-                                      e.stopPropagation(); // Avoid triggering accordion expand
-                                      onReceiveBill(bill.id);
-                                      alert("Duplicata liquidada no sistema com sucesso!");
+                                      e.stopPropagation();
+                                      if (currentUserRole !== "Administrador") {
+                                        setRoleError("Apenas usuários Administradores podem excluir lançamentos do contas a receber!");
+                                        return;
+                                      }
+                                      setDeleteConfirm({ id: bill.id, type: "receivable", descricao: bill.descricao });
                                     }}
-                                    className="text-[10px] bg-white/5 hover:bg-[#FF6B00]/15 hover:text-[#FF6B00] border border-white/10 px-2.5 py-1 rounded-lg transition-all active:scale-95 text-xs text-[#FF6B00] font-semibold"
+                                    className="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 p-2 rounded-lg transition-colors active:scale-[0.95]"
+                                    title="Excluir Lançamento (Apenas Administrador)"
                                   >
-                                    Receber Duplicata
+                                    <Trash2 className="w-3" />
                                   </button>
-                                ) : (
-                                  <span className="text-[10px] text-gray-500 font-mono">Recebida OK</span>
-                                )}
+                                </div>
                               </td>
                             </tr>
                             
@@ -841,6 +882,70 @@ export default function FinancialView({
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-[#1E293B] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+          >
+            <h3 className="text-lg font-bold text-white mb-2">Confirmar Exclusão</h3>
+            <p className="text-gray-300 text-sm mb-6">
+              Você tem certeza de que deseja realizar a exclusão permanente de{" "}
+              <span className="font-semibold text-red-400">"{deleteConfirm.descricao}"</span>? 
+              {deleteConfirm.type === "payable" 
+                ? " Esta ação removerá definitivamente o lançamento do contas a pagar."
+                : " Esta ação removerá definitivamente o lançamento do contas a receber."}
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (deleteConfirm.type === "payable") {
+                    onDeletePayable && onDeletePayable(deleteConfirm.id);
+                  } else {
+                    onDeleteReceivable && onDeleteReceivable(deleteConfirm.id);
+                  }
+                  setDeleteConfirm(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition-colors"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Access Denied Modal */}
+      {roleError && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-[#1E293B] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center"
+          >
+            <div className="text-red-500 text-4xl mb-4 font-bold flex justify-center">⚠️</div>
+            <h3 className="text-lg font-bold text-white mb-2">Acesso Restrito</h3>
+            <p className="text-gray-300 text-sm mb-6">
+              {roleError}
+            </p>
+            <button
+              onClick={() => setRoleError(null)}
+              className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-semibold transition-colors"
+            >
+              Entendido
+            </button>
           </motion.div>
         </div>
       )}

@@ -762,6 +762,39 @@ export default function App() {
     saveToStorage({ usersList: updated });
   };
 
+  const handleDeleteSale = (saleId: string) => {
+    if (currentUser?.regra !== "Administrador") {
+      addToast("Acesso Negado", "Apenas usuários Administradores podem excluir vendas!", "error");
+      return;
+    }
+    const updated = sales.filter((s) => s.id !== saleId);
+    setSales(updated);
+    saveToStorage({ sales: updated });
+    addToast("Venda Excluída", `A venda #${saleId} foi excluída permanentemente.`, "success");
+  };
+
+  const handleDeletePayable = (id: string) => {
+    if (currentUser?.regra !== "Administrador") {
+      addToast("Acesso Negado", "Apenas usuários Administradores podem excluir pagamentos!", "error");
+      return;
+    }
+    const updated = payables.filter((p) => p.id !== id);
+    setPayables(updated);
+    saveToStorage({ payables: updated });
+    addToast("Pagamento Excluído", "Lançamento excluído com sucesso do contas a pagar.", "success");
+  };
+
+  const handleDeleteReceivable = (id: string) => {
+    if (currentUser?.regra !== "Administrador") {
+      addToast("Acesso Negado", "Apenas usuários Administradores podem excluir lançamentos financeiros!", "error");
+      return;
+    }
+    const updated = receivables.filter((r) => r.id !== id);
+    setReceivables(updated);
+    saveToStorage({ receivables: updated });
+    addToast("Recebimento Excluído", "Lançamento excluído com sucesso do contas a receber.", "success");
+  };
+
   // Action: Trigger simulation of a random customer buying in real time
   const handleTriggerSimulatedVenda = () => {
     if (!activeSession) {
@@ -859,6 +892,9 @@ export default function App() {
             onReceiveBill={handleReceiveBill}
             products={products}
             sales={sales}
+            currentUserRole={currentUser?.regra}
+            onDeletePayable={handleDeletePayable}
+            onDeleteReceivable={handleDeleteReceivable}
           />
         );
       case "pdv":
@@ -894,6 +930,8 @@ export default function App() {
             sales={sales}
             payables={payables}
             receivables={receivables}
+            currentUserRole={currentUser?.regra}
+            onDeleteSale={handleDeleteSale}
           />
         );
       case "configuracoes":

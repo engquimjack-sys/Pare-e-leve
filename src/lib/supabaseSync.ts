@@ -138,13 +138,16 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
       if (mapped.length > 0) {
         const { error } = await supabase.from("usuarios").upsert(mapped);
         if (error) throw new Error(`Erro em usuários: ${error.message}`);
-        
-        const ids = mapped.map((m: any) => m.id).filter(Boolean);
-        if (ids.length > 0) {
-          await supabase.from("usuarios").delete().not("id", "in", `(${ids.join(",")})`);
-        }
-      } else {
-        await supabase.from("usuarios").delete().neq("id", "");
+      }
+      
+      const localIds = mapped.map((m: any) => m.id).filter(Boolean);
+      const { data: remoteRows } = await supabase.from("usuarios").select("id");
+      const remoteIds = (remoteRows || []).map((r: any) => r.id);
+      const localSet = new Set(localIds);
+      const idsToDelete = remoteIds.filter((id: string) => !localSet.has(id));
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase.from("usuarios").delete().in("id", idsToDelete);
+        if (delErr) throw new Error(`Erro ao deletar usuários obsoletos: ${delErr.message}`);
       }
     }
 
@@ -154,13 +157,16 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
       if (mapped.length > 0) {
         const { error } = await supabase.from("fornecedores").upsert(mapped);
         if (error) throw new Error(`Erro em fornecedores: ${error.message}`);
-
-        const ids = mapped.map((m: any) => m.id).filter(Boolean);
-        if (ids.length > 0) {
-          await supabase.from("fornecedores").delete().not("id", "in", `(${ids.join(",")})`);
-        }
-      } else {
-        await supabase.from("fornecedores").delete().neq("id", "");
+      }
+      
+      const localIds = mapped.map((m: any) => m.id).filter(Boolean);
+      const { data: remoteRows } = await supabase.from("fornecedores").select("id");
+      const remoteIds = (remoteRows || []).map((r: any) => r.id);
+      const localSet = new Set(localIds);
+      const idsToDelete = remoteIds.filter((id: string) => !localSet.has(id));
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase.from("fornecedores").delete().in("id", idsToDelete);
+        if (delErr) throw new Error(`Erro ao deletar fornecedores obsoletos: ${delErr.message}`);
       }
     }
 
@@ -170,13 +176,16 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
       if (mapped.length > 0) {
         const { error } = await supabase.from("clientes").upsert(mapped);
         if (error) throw new Error(`Erro em clientes: ${error.message}`);
-
-        const ids = mapped.map((m: any) => m.id).filter(Boolean);
-        if (ids.length > 0) {
-          await supabase.from("clientes").delete().not("id", "in", `(${ids.join(",")})`);
-        }
-      } else {
-        await supabase.from("clientes").delete().neq("id", "");
+      }
+      
+      const localIds = mapped.map((m: any) => m.id).filter(Boolean);
+      const { data: remoteRows } = await supabase.from("clientes").select("id");
+      const remoteIds = (remoteRows || []).map((r: any) => r.id);
+      const localSet = new Set(localIds);
+      const idsToDelete = remoteIds.filter((id: string) => !localSet.has(id));
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase.from("clientes").delete().in("id", idsToDelete);
+        if (delErr) throw new Error(`Erro ao deletar clientes obsoletos: ${delErr.message}`);
       }
     }
 
@@ -192,13 +201,16 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
       if (mapped.length > 0) {
         const { error } = await supabase.from("produtos").upsert(mapped);
         if (error) throw new Error(`Erro em produtos: ${error.message}`);
-
-        const ids = mapped.map((m: any) => m.id).filter(Boolean);
-        if (ids.length > 0) {
-          await supabase.from("produtos").delete().not("id", "in", `(${ids.join(",")})`);
-        }
-      } else {
-        await supabase.from("produtos").delete().neq("id", "");
+      }
+      
+      const localIds = mapped.map((m: any) => m.id).filter(Boolean);
+      const { data: remoteRows } = await supabase.from("produtos").select("id");
+      const remoteIds = (remoteRows || []).map((r: any) => r.id);
+      const localSet = new Set(localIds);
+      const idsToDelete = remoteIds.filter((id: string) => !localSet.has(id));
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase.from("produtos").delete().in("id", idsToDelete);
+        if (delErr) throw new Error(`Erro ao deletar produtos obsoletos: ${delErr.message}`);
       }
     }
 
@@ -236,13 +248,16 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
       if (mapped.length > 0) {
         const { error } = await supabase.from("contas_pagar").upsert(mapped);
         if (error) throw new Error(`Erro em contas a pagar: ${error.message}`);
-
-        const ids = mapped.map((m: any) => m.id).filter(Boolean);
-        if (ids.length > 0) {
-          await supabase.from("contas_pagar").delete().not("id", "in", `(${ids.join(",")})`);
-        }
-      } else {
-        await supabase.from("contas_pagar").delete().neq("id", "");
+      }
+      
+      const localIds = mapped.map((m: any) => m.id).filter(Boolean);
+      const { data: remoteRows } = await supabase.from("contas_pagar").select("id");
+      const remoteIds = (remoteRows || []).map((r: any) => r.id);
+      const localSet = new Set(localIds);
+      const idsToDelete = remoteIds.filter((id: string) => !localSet.has(id));
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase.from("contas_pagar").delete().in("id", idsToDelete);
+        if (delErr) throw new Error(`Erro ao deletar contas a pagar obsoletas: ${delErr.message}`);
       }
     }
 
@@ -258,13 +273,16 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
       if (mapped.length > 0) {
         const { error } = await supabase.from("contas_receber").upsert(mapped);
         if (error) throw new Error(`Erro em contas a receber: ${error.message}`);
-
-        const ids = mapped.map((m: any) => m.id).filter(Boolean);
-        if (ids.length > 0) {
-          await supabase.from("contas_receber").delete().not("id", "in", `(${ids.join(",")})`);
-        }
-      } else {
-        await supabase.from("contas_receber").delete().neq("id", "");
+      }
+      
+      const localIds = mapped.map((m: any) => m.id).filter(Boolean);
+      const { data: remoteRows } = await supabase.from("contas_receber").select("id");
+      const remoteIds = (remoteRows || []).map((r: any) => r.id);
+      const localSet = new Set(localIds);
+      const idsToDelete = remoteIds.filter((id: string) => !localSet.has(id));
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase.from("contas_receber").delete().in("id", idsToDelete);
+        if (delErr) throw new Error(`Erro ao deletar contas a receber obsoletas: ${delErr.message}`);
       }
     }
 
@@ -304,11 +322,12 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
             if (itemsErr) throw new Error(`Erro em itens de venda: ${itemsErr.message}`);
 
             const activeItemIds = itemsDb.map((it: any) => it.id).filter(Boolean);
-            if (activeItemIds.length > 0) {
-              await supabase.from("itens_venda")
-                .delete()
-                .eq("venda_id", sale.id)
-                .not("id", "in", `(${activeItemIds.join(",")})`);
+            const { data: remoteItems } = await supabase.from("itens_venda").select("id").eq("venda_id", sale.id);
+            const remoteItemIds = (remoteItems || []).map((r: any) => r.id);
+            const activeItemsSet = new Set(activeItemIds);
+            const itemsToDelete = remoteItemIds.filter((idStr: string) => !activeItemsSet.has(idStr));
+            if (itemsToDelete.length > 0) {
+              await supabase.from("itens_venda").delete().in("id", itemsToDelete);
             }
           } else {
             await supabase.from("itens_venda").delete().eq("venda_id", sale.id);
@@ -316,10 +335,17 @@ export async function pushLocalDataToSupabase(localData: any): Promise<SyncStatu
         }
       }
 
-      if (activeSaleIds.length > 0) {
-        await supabase.from("vendas").delete().not("id", "in", `(${activeSaleIds.join(",")})`);
-      } else {
-        await supabase.from("vendas").delete().neq("id", "");
+      const { data: remoteSalesRows } = await supabase.from("vendas").select("id");
+      const remoteSaleIds = (remoteSalesRows || []).map((r: any) => r.id);
+      const activeSalesSet = new Set(activeSaleIds);
+      const salesToDelete = remoteSaleIds.filter((idStr: string) => !activeSalesSet.has(idStr));
+      
+      if (salesToDelete.length > 0) {
+        // First delete foreign key entries in itens_venda to avoid constraints violation
+        await supabase.from("itens_venda").delete().in("venda_id", salesToDelete);
+        // Then delete the sale itself
+        const { error: delSalesErr } = await supabase.from("vendas").delete().in("id", salesToDelete);
+        if (delSalesErr) throw new Error(`Erro ao deletar vendas obsoletas: ${delSalesErr.message}`);
       }
     }
 
