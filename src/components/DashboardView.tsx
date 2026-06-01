@@ -42,6 +42,8 @@ interface DashboardProps {
   receivables: ContaReceber[];
   onTriggerSimulation: () => void;
   currentUser?: Usuario;
+  initialCashFloat?: number;
+  onUpdateCashFloat?: (newVal: number) => void;
 }
 
 export default function DashboardView({
@@ -51,8 +53,14 @@ export default function DashboardView({
   receivables,
   onTriggerSimulation,
   currentUser,
+  initialCashFloat,
+  onUpdateCashFloat,
 }: DashboardProps) {
   const [period, setPeriod] = useState<"dia" | "semana" | "mes" | "ano">("mes");
+  const [isEditingCash, setIsEditingCash] = useState(false);
+  const [editCashType, setEditCashType] = useState<"current" | "baseline">("current");
+  const [tempCashVal, setTempCashVal] = useState<string>("");
+  const [cashError, setCashError] = useState<string | null>(null);
 
   // Dynamically obtain reference date to support simulated sales
   const referenceDate = useMemo(() => {
@@ -130,8 +138,9 @@ export default function DashboardView({
     const totalSales = sales.reduce((sum, v) => sum + v.total, 0);
     const totalReceived = receivables.filter(r => r.status === "Recebido").reduce((sum, r) => sum + r.valor, 0);
     const totalPaid = payables.filter(p => p.status === "Pago").reduce((sum, p) => sum + p.valor, 0);
-    return Math.max(0, 1500 + totalSales + totalReceived - totalPaid); // Starting float of R$1500
-  }, [sales, receivables, payables]);
+    const baseFloat = initialCashFloat !== undefined ? initialCashFloat : 1500;
+    return Math.max(0, baseFloat + totalSales + totalReceived - totalPaid);
+  }, [sales, receivables, payables, initialCashFloat]);
 
   const itemsInLowStock = useMemo(() => {
     return products.filter((p) => p.quantidade <= p.estoqueMinimo);
@@ -385,11 +394,28 @@ export default function DashboardView({
         {/* Card 1 */}
         <motion.div
           whileHover={{ y: -4 }}
-          className="bg-[#0F172A] border border-white/5 p-4 rounded-2xl flex flex-col justify-between h-32 relative group shadow-md"
+          onClick={() => {
+            const isAuthorized = currentUser?.regra === "Administrador" || currentUser?.regra === "Gerente";
+            if (!isAuthorized) {
+              setCashError("Apenas Administradores e Gerentes podem alterar o saldo de caixa!");
+              return;
+            }
+            setTempCashVal(totalInBox.toFixed(2));
+            setEditCashType("current");
+            setIsEditingCash(true);
+          }}
+          className="bg-[#0F172A] border border-white/5 p-4 rounded-2xl flex flex-col justify-between h-32 relative group shadow-md cursor-pointer hover:border-emerald-500/30 transition-all"
         >
           <div className="flex justify-between items-start">
-            <span className="text-xs text-gray-400 font-medium">Saldo de Caixa</span>
-            <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-400">
+            <span className="text-xs text-gray-400 font-medium flex items-center gap-1">
+              Saldo de Caixa
+              {(currentUser?.regra === "Administrador" || currentUser?.regra === "Gerente") && (
+                <span className="text-[10px] text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-500/10 px-1.5 py-0.5 rounded ml-1">
+                  Ajustar
+                </span>
+              )}
+            </span>
+            <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-400 group-hover:bg-emerald-500 group-hover:text-black transition-colors">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
@@ -397,9 +423,14 @@ export default function DashboardView({
             <div className="text-lg md:text-xl font-bold text-white tracking-tight">
               R$ {totalInBox.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </div>
-            <div className="text-[10px] text-emerald-400 flex items-center gap-0.5 mt-1">
-              <ArrowUpRight className="w-3 h-3" />
-              <span>+RS 1.5K fundo incluído</span>
+            <div className="text-[10px] text-emerald-400 flex items-center justify-between mt-1">
+              <span className="flex items-center gap-0.5">
+                <ArrowUpRight className="w-3 h-3" />
+                <span>fundo: R$ {(initialCashFloat !== undefined ? initialCashFloat : 1500).toLocaleString("pt-BR", { minimumFractionDigits: 0 })}</span>
+              </span>
+              {(currentUser?.regra === "Administrador" || currentUser?.regra === "Gerente") && (
+                <span className="text-[9px] text-[#FF6B00] underline font-medium">Alterar</span>
+              )}
             </div>
           </div>
         </motion.div>
@@ -701,6 +732,138 @@ export default function DashboardView({
           </div>
         </div>
       </div>
+
+      {/* Modal: Ajustar Saldo de Caixa */}
+      {isEditingCash && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-[#1E293B] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+          >
+            <h3 className="text-lg font-bold text-white mb-2">Ajustar Saldo de Caixa</h3>
+            <p className="text-gray-300 text-xs mb-4">
+              Selecione o tipo de ajuste para o seu controle do fluxo de caixa:
+            </p>
+
+            <div className="flex bg-[#0F172A] p-1 rounded-xl mb-4 border border-white/5">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditCashType("current");
+                  setTempCashVal(totalInBox.toFixed(2));
+                }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  editCashType === "current"
+                    ? "bg-[#FF6B00] text-white shadow"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Ajustar Saldo Atual
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditCashType("baseline");
+                  const currentFloat = initialCashFloat !== undefined ? initialCashFloat : 1500;
+                  setTempCashVal(currentFloat.toFixed(2));
+                }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  editCashType === "baseline"
+                    ? "bg-[#FF6B00] text-white shadow"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Ajustar Fundo Inicial
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  {editCashType === "current"
+                    ? "Desejo que o Saldo de Caixa Atual seja:"
+                    : "Desejo que o Fundo Inicial de Entrada seja:"}
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-gray-500 text-sm font-semibold">R$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={tempCashVal}
+                    onChange={(e) => setTempCashVal(e.target.value)}
+                    className="w-full bg-[#0F172A] border border-white/10 py-2.5 pl-10 pr-4 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-[#FF6B00]/50"
+                    placeholder="0.00"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500 mt-2 font-sans">
+                  {editCashType === "current"
+                    ? "O sistema recalculará dinamicamente seu fundo de troco para que o caixa atual coincida exatamente com o saldo desejado."
+                    : "Mudará diretamente o aporte base inicial em caixa (padrão é R$ 1.500,00)."}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCash(false)}
+                  className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const parsedVal = parseFloat(tempCashVal);
+                    if (isNaN(parsedVal) || parsedVal < 0) {
+                      alert("Por favor, insira um valor válido.");
+                      return;
+                    }
+                    if (editCashType === "current") {
+                      const totalSales = sales.reduce((sum, v) => sum + v.total, 0);
+                      const totalReceived = receivables.filter(r => r.status === "Recebido").reduce((sum, r) => sum + r.valor, 0);
+                      const totalPaid = payables.filter(p => p.status === "Pago").reduce((sum, p) => sum + p.valor, 0);
+                      const targetBase = parsedVal - totalSales - totalReceived + totalPaid;
+                      onUpdateCashFloat && onUpdateCashFloat(targetBase);
+                    } else {
+                      onUpdateCashFloat && onUpdateCashFloat(parsedVal);
+                    }
+                    setIsEditingCash(false);
+                    alert("Saldo do caixa atualizado com sucesso!");
+                  }}
+                  className="px-4 py-2.5 bg-[#FF6B00] hover:bg-orange-600 text-white rounded-xl text-xs font-semibold shadow-md shadow-orange-500/10 transition-colors"
+                >
+                  Confirmar Ajuste
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Access Denied / Warning Modal */}
+      {cashError && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-[#1E293B] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center"
+          >
+            <div className="text-red-500 text-4xl mb-4 font-bold flex justify-center">⚠️</div>
+            <h3 className="text-lg font-bold text-white mb-2">Acesso Restrito</h3>
+            <p className="text-gray-300 text-sm mb-6">
+              {cashError}
+            </p>
+            <button
+              onClick={() => setCashError(null)}
+              className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-semibold transition-colors"
+            >
+              Entendido
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

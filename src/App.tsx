@@ -96,6 +96,7 @@ export default function App() {
   const [movements, setMovements] = useState<MovimentacaoEstoque[]>([]);
   const [usersList, setUsersList] = useState<Usuario[]>([]);
   const [activeSession, setActiveSession] = useState<CaixaSessao | null>(null);
+  const [initialCashFloat, setInitialCashFloat] = useState<number>(1500);
 
   // Load from local storage or seed
   useEffect(() => {
@@ -110,6 +111,9 @@ export default function App() {
         setSuppliers(parsed.suppliers || []);
         setClients(parsed.clients || []);
         setMovements(parsed.movements || []);
+        if (parsed.initialCashFloat !== undefined) {
+          setInitialCashFloat(parsed.initialCashFloat);
+        }
         
         let loadedUsers = (parsed.usersList || []) as Usuario[];
         loadedUsers = loadedUsers.map((u) => {
@@ -369,6 +373,7 @@ export default function App() {
     usersList?: Usuario[];
     activeSession?: CaixaSessao | null;
     currentUser?: Usuario | null;
+    initialCashFloat?: number;
   }) => {
     // Merge with current state
     const currentSerialized = {
@@ -381,7 +386,8 @@ export default function App() {
       movements: updates.movements !== undefined ? updates.movements : movements,
       usersList: updates.usersList !== undefined ? updates.usersList : usersList,
       activeSession: updates.activeSession !== undefined ? updates.activeSession : activeSession,
-      currentUser: updates.currentUser !== undefined ? updates.currentUser : currentUser
+      currentUser: updates.currentUser !== undefined ? updates.currentUser : currentUser,
+      initialCashFloat: updates.initialCashFloat !== undefined ? updates.initialCashFloat : initialCashFloat
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSerialized));
 
@@ -763,8 +769,8 @@ export default function App() {
   };
 
   const handleDeleteSale = (saleId: string) => {
-    if (currentUser?.regra !== "Administrador") {
-      addToast("Acesso Negado", "Apenas usuários Administradores podem excluir vendas!", "error");
+    if (currentUser?.regra !== "Administrador" && currentUser?.regra !== "Gerente") {
+      addToast("Acesso Negado", "Apenas Administradores e Gerentes podem excluir vendas!", "error");
       return;
     }
     const updated = sales.filter((s) => s.id !== saleId);
@@ -774,8 +780,8 @@ export default function App() {
   };
 
   const handleDeletePayable = (id: string) => {
-    if (currentUser?.regra !== "Administrador") {
-      addToast("Acesso Negado", "Apenas usuários Administradores podem excluir pagamentos!", "error");
+    if (currentUser?.regra !== "Administrador" && currentUser?.regra !== "Gerente") {
+      addToast("Acesso Negado", "Apenas Administradores e Gerentes podem excluir pagamentos!", "error");
       return;
     }
     const updated = payables.filter((p) => p.id !== id);
@@ -785,14 +791,19 @@ export default function App() {
   };
 
   const handleDeleteReceivable = (id: string) => {
-    if (currentUser?.regra !== "Administrador") {
-      addToast("Acesso Negado", "Apenas usuários Administradores podem excluir lançamentos financeiros!", "error");
+    if (currentUser?.regra !== "Administrador" && currentUser?.regra !== "Gerente") {
+      addToast("Acesso Negado", "Apenas Administradores e Gerentes podem excluir lançamentos financeiros!", "error");
       return;
     }
     const updated = receivables.filter((r) => r.id !== id);
     setReceivables(updated);
     saveToStorage({ receivables: updated });
     addToast("Recebimento Excluído", "Lançamento excluído com sucesso do contas a receber.", "success");
+  };
+
+  const handleUpdateCashFloat = (newFloat: number) => {
+    setInitialCashFloat(newFloat);
+    saveToStorage({ initialCashFloat: newFloat });
   };
 
   // Action: Trigger simulation of a random customer buying in real time
@@ -859,6 +870,8 @@ export default function App() {
             receivables={receivables}
             onTriggerSimulation={handleTriggerSimulatedVenda}
             currentUser={currentUser || undefined}
+            initialCashFloat={initialCashFloat}
+            onUpdateCashFloat={handleUpdateCashFloat}
           />
         );
       case "estoque":

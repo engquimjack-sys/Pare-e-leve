@@ -522,14 +522,14 @@ export default function FinancialView({
                             )}
                             <button
                               onClick={() => {
-                                if (currentUserRole !== "Administrador") {
-                                  setRoleError("Apenas usuários Administradores podem excluir lançamentos marcados no contas a pagar!");
+                                if (currentUserRole !== "Administrador" && currentUserRole !== "Gerente") {
+                                  setRoleError("Apenas usuários Administradores e Gerentes podem excluir lançamentos do contas a pagar!");
                                   return;
                                 }
                                 setDeleteConfirm({ id: bill.id, type: "payable", descricao: bill.descricao });
                               }}
                               className="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 p-2 rounded-lg transition-colors active:scale-[0.95]"
-                              title="Excluir Pagamento (Apenas Administrador)"
+                              title="Excluir Pagamento (Apenas Administrador/Gerente)"
                             >
                               <Trash2 className="w-3" />
                             </button>
@@ -669,14 +669,14 @@ export default function FinancialView({
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (currentUserRole !== "Administrador") {
-                                        setRoleError("Apenas usuários Administradores podem excluir lançamentos do contas a receber!");
+                                      if (currentUserRole !== "Administrador" && currentUserRole !== "Gerente") {
+                                        setRoleError("Apenas usuários Administradores e Gerentes podem excluir lançamentos do contas a receber!");
                                         return;
                                       }
                                       setDeleteConfirm({ id: bill.id, type: "receivable", descricao: bill.descricao });
                                     }}
                                     className="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 p-2 rounded-lg transition-colors active:scale-[0.95]"
-                                    title="Excluir Lançamento (Apenas Administrador)"
+                                    title="Excluir Lançamento (Apenas Administrador/Gerente)"
                                   >
                                     <Trash2 className="w-3" />
                                   </button>

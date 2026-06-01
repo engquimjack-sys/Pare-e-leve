@@ -1100,14 +1100,14 @@ export default function ReportsView({
                               </button>
                               <button
                                 onClick={() => {
-                                  if (currentUserRole !== "Administrador") {
-                                    setRoleError("Apenas usuários Administradores podem excluir vendas permanentemente!");
+                                  if (currentUserRole !== "Administrador" && currentUserRole !== "Gerente") {
+                                    setRoleError("Apenas usuários Administradores e Gerentes podem excluir vendas permanentemente!");
                                     return;
                                   }
                                   setSaleToDelete(sale.id);
                                 }}
                                 className="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 p-2 rounded-lg transition-colors active:scale-[0.95]"
-                                title="Excluir Venda (Apenas Administrador)"
+                                title="Excluir Venda (Apenas Administrador/Gerente)"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
