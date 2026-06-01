@@ -25,8 +25,14 @@ import {
   Barcode,
   PackagePlus,
   Link,
-  Upload
+  Upload,
+  FileDown,
+  FileSpreadsheet,
+  FileText
 } from "lucide-react";
+import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { Produto, Fornecedor } from "../types";
 
 function getProductImage(fotoUrl?: string, name?: string, brand?: string): string {
@@ -331,6 +337,247 @@ export default function StockView({
     }
   };
 
+  const handleExportExcel = () => {
+    try {
+      const sortedData = [...filteredProducts];
+      
+      const totalItems = sortedData.reduce((sum, p) => sum + p.quantidade, 0);
+      const totalCostValue = sortedData.reduce((sum, p) => sum + (p.quantidade * (p.valorCompra || 0)), 0);
+      const totalSellValue = sortedData.reduce((sum, p) => sum + (p.quantidade * (p.valorVenda || 0)), 0);
+      const lowStockCount = sortedData.filter(p => p.quantidade <= p.estoqueMinimo).length;
+
+      const rows = [
+        ["PARE & LEVE - SISTEMA DE SUPERMERCADOS INTELIGENTES"],
+        ["RELATÓRIO ESTRUTURADO DE ESTOQUE"],
+        [`Data de Geração: ${new Date().toLocaleDateString("pt-BR")} ${new Date().toLocaleTimeString("pt-BR")}`],
+        [""],
+        ["RESUMO DOS INDICADORES:"],
+        ["Total de Itens em Estoque", totalItems, "unidades"],
+        ["Valor de Custo Total Estocado", totalCostValue, "R$"],
+        ["Valor de Venda Total Estimado", totalSellValue, "R$"],
+        ["Produtos em Estado Crítico", lowStockCount, "itens"],
+        [""],
+        [
+          "ID",
+          "Código de Barras",
+          "Nome do Produto",
+          "Marca",
+          "Categoria",
+          "Qtd em Estoque",
+          "Estoque Mínimo",
+          "Preço de Custo (R$)",
+          "Preço de Venda (R$)",
+          "Valor Total de Custo (R$)",
+          "Valor Total de Venda (R$)",
+          "Status",
+          "Data de Validade",
+          "Previsão IA (Demanda)",
+          "Sugestão IA (Compra)"
+        ]
+      ];
+
+      sortedData.forEach((p) => {
+        const isCritical = p.quantidade <= p.estoqueMinimo;
+        rows.push([
+          p.id,
+          p.codigoBarras,
+          p.nome,
+          p.marca,
+          p.categoria,
+          p.quantidade,
+          p.estoqueMinimo,
+          p.valorCompra,
+          p.valorVenda,
+          p.quantidade * (p.valorCompra || 0),
+          p.quantidade * (p.valorVenda || 0),
+          isCritical ? "CRÍTICO/BAIXO" : "SEGURO",
+          p.validade,
+          p.demandaIA || "N/A",
+          p.sugestaoCompraIA || 0
+        ]);
+      });
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+
+      worksheet["!cols"] = [
+        { wch: 15 }, // ID
+        { wch: 16 }, // Barcode
+        { wch: 30 }, // Nome
+        { wch: 15 }, // Marca
+        { wch: 18 }, // Categoria
+        { wch: 14 }, // Qtd
+        { wch: 14 }, // Est Minimo
+        { wch: 18 }, // Custo
+        { wch: 18 }, // Venda
+        { wch: 22 }, // Total Custo
+        { wch: 22 }, // Total Venda
+        { wch: 16 }, // Status
+        { wch: 14 }, // Validade
+        { wch: 15 }, // IA
+        { wch: 15 }  // Sugestao
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Estoque Pare & Leve");
+      XLSX.writeFile(workbook, `Relatorio_Estoque_${new Date().toISOString().split("T")[0]}.xlsx`);
+    } catch (error) {
+      console.error("Erro exportando Excel:", error);
+      alert("Houve um problema ao gerar o documento Excel.");
+    }
+  };
+
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4"
+      });
+
+      const sortedData = [...filteredProducts];
+      const totalItems = sortedData.reduce((sum, p) => sum + p.quantidade, 0);
+      const totalCostValue = sortedData.reduce((sum, p) => sum + (p.quantidade * (p.valorCompra || 0)), 0);
+      const totalSellValue = sortedData.reduce((sum, p) => sum + (p.quantidade * (p.valorVenda || 0)), 0);
+      const lowStockCount = sortedData.filter(p => p.quantidade <= p.estoqueMinimo).length;
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, 297, 30, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("PARE & LEVE - SUPERMERCADO INTELIGENTE", 15, 12);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(230, 230, 230);
+      doc.text("Relatório Estruturado de Controle & Inventário de Estoque", 15, 18);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(200, 200, 200);
+      doc.text(`Gerado em: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}`, 282, 12, { align: "right" });
+      doc.text(`Filtro Categoria: ${selectedCategory}`, 282, 18, { align: "right" });
+
+      doc.setDrawColor(226, 232, 240);
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(15, 35, 267, 24, 3, 3, "FD");
+
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("RESUMO DOS INDICADORES DO ESTOQUE:", 20, 41);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(71, 85, 105);
+      doc.text("Total de Unidades Estocadas:", 20, 48);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text(`${totalItems} un.`, 75, 48);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Produtos com Estoque Crítico:", 20, 53);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(lowStockCount > 0 ? 220 : 15, lowStockCount > 0 ? 38 : 23, lowStockCount > 0 ? 38 : 42);
+      doc.text(`${lowStockCount} item(ns)`, 75, 53);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Custo Operacional Estocado:", 125, 48);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text(`R$ ${totalCostValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, 175, 48);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Potencial de Receita de Vendas:", 125, 53);
+      doc.setFont("helvetica", "bold");
+      doc.text(`R$ ${totalSellValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, 175, 53);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Lucro Teórico Projetado (Markup):", 215, 48);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(22, 163, 74);
+      doc.text(`R$ ${(totalSellValue - totalCostValue).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, 265, 48, { align: "right" });
+
+      const tableHeaders = [
+        ["Cód. Barras/ID", "Produto / Fabricante", "Categoria", "Qtd", "Mín", "Custo", "Venda", "Val. Total Custo", "Vencimento", "Status"]
+      ];
+
+      const tableRows = sortedData.map((p) => {
+        const isCritical = p.quantidade <= p.estoqueMinimo;
+        const totalCostProd = p.quantidade * (p.valorCompra || 0);
+        return [
+          p.codigoBarras || p.id,
+          `${p.nome} (${p.marca})`,
+          p.categoria,
+          `${p.quantidade} un`,
+          `${p.estoqueMinimo} un`,
+          `R$ ${(p.valorCompra || 0).toFixed(2)}`,
+          `R$ ${(p.valorVenda || 0).toFixed(2)}`,
+          `R$ ${totalCostProd.toFixed(2)}`,
+          p.validade,
+          isCritical ? "CRÍTICO" : "SEGURO"
+        ];
+      });
+
+      autoTable(doc, {
+        head: tableHeaders,
+        body: tableRows,
+        startY: 65,
+        theme: "striped",
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+          textColor: [51, 65, 85]
+        },
+        headStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+          fontStyle: "bold"
+        },
+        columnStyles: {
+          0: { cellWidth: 32 },
+          1: { cellWidth: 60, fontStyle: "bold" },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 16, halign: "center" },
+          4: { cellWidth: 16, halign: "center" },
+          5: { cellWidth: 20 },
+          6: { cellWidth: 20 },
+          7: { cellWidth: 26 },
+          8: { cellWidth: 24 },
+          9: { cellWidth: 22, fontStyle: "bold" }
+        },
+        didParseCell: (data: any) => {
+          if (data.column.index === 9 && data.cell.text[0] === "CRÍTICO") {
+            data.cell.styles.textColor = [239, 68, 68];
+          }
+        }
+      });
+
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Pare & Leve Gestão - Pág. ${i} de ${pageCount} | Documento Oficial de Auditoria`,
+          148,
+          205,
+          { align: "center" }
+        );
+      }
+
+      doc.save(`Relatorio_Estoque_${new Date().toISOString().split("T")[0]}.pdf`);
+    } catch (error) {
+      console.error("Erro exportando PDF:", error);
+      alert("Houve um problema ao gerar o documento PDF.");
+    }
+  };
+
   const handleOpenEdit = (prod: Produto) => {
     setCurrentProduct(prod);
     setIsEditing(true);
@@ -474,7 +721,25 @@ export default function StockView({
           </div>
         </div>
 
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="flex gap-2 w-full md:w-auto flex-wrap md:flex-nowrap">
+          <button
+            onClick={handleExportPDF}
+            className="bg-[#EF4444]/10 hover:bg-[#EF4444] text-[#EF4444] hover:text-white border border-[#EF4444]/20 text-xs font-semibold px-3.5 py-3 rounded-xl transition-all flex items-center gap-2"
+            title="Exportar Estoque em PDF"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Exportar PDF</span>
+          </button>
+
+          <button
+            onClick={handleExportExcel}
+            className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 text-xs font-semibold px-3.5 py-3 rounded-xl transition-all flex items-center gap-2"
+            title="Exportar Estoque em Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Exportar Excel</span>
+          </button>
+
           <button
             onClick={handleAIForecast}
             disabled={loadingAI}
